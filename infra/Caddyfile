@@ -1,29 +1,25 @@
 # TheColony — TLS reverse proxy.
 #
-# We use 43-204-159-8.sslip.io which resolves to 43.204.159.8 automatically,
-# so Caddy can auto-issue a Let's Encrypt cert without you owning a domain.
-# Replace the host with your real domain when you have one.
+# We expose the API under TWO hostnames so the user has a fallback if one
+# wildcard-DNS provider gets blocked by a hostile network:
+#   - 43-204-159-8.sslip.io  (sslip.io)
+#   - 43-204-159-8.nip.io    (nip.io)
+# Both resolve to the EC2 public IP via their respective wildcard DNS.
+# Caddy auto-issues Let's Encrypt certs for both. Pick whichever resolves
+# cleanly from your network and set NEXT_PUBLIC_API_BASE accordingly.
 
-43-204-159-8.sslip.io {
+43-204-159-8.sslip.io, 43-204-159-8.nip.io {
     encode zstd gzip
 
-    # Health
-    @health path /v1/health
-    handle @health {
-        reverse_proxy localhost:4001
-    }
-
-    # WebSocket upgrade
     @ws {
         path /v1/events/stream
         header Connection *Upgrade*
-        header Upgrade websocket
+        header Upgrade    websocket
     }
     handle @ws {
         reverse_proxy localhost:4001
     }
 
-    # Everything else
     handle {
         reverse_proxy localhost:4001
     }
