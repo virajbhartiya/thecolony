@@ -212,6 +212,31 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
   `);
   const nearbyRich = richRow[0]?.id ?? null;
 
+  const wantedRow = await db.execute<{
+    agent_id: string;
+    incident_id: string;
+    charge: string;
+    bounty_cents: number;
+  }>(sql`
+    SELECT a.id AS agent_id, i.id AS incident_id, i.kind AS charge, l.bounty_cents
+    FROM ${schema.legal_status} l
+    JOIN ${schema.agent} a ON a.id = l.agent_id
+    JOIN ${schema.incident} i ON i.perp_id = a.id AND i.resolved = false
+    WHERE a.status = 'alive'
+      AND a.id <> ${agent.id}
+      AND l.bounty_cents > 0
+      AND NOT EXISTS (
+        SELECT 1
+        FROM ${schema.world_event} e
+        WHERE e.kind = 'agent_accused'
+          AND e.payload->>'incident_id' = i.id::text
+          AND e.actor_ids[1] = ${agent.id}::uuid
+      )
+    ORDER BY ((a.pos_x - ${agent.pos_x})^2 + (a.pos_y - ${agent.pos_y})^2) ASC, l.bounty_cents DESC
+    LIMIT 1
+  `);
+  const wanted = wantedRow[0] ?? null;
+
   // are we currently inside a shop's footprint?
   const shopHere = allBuildings.find(
     (b) =>
@@ -241,6 +266,10 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     fire_candidate_id: fireCandidateId,
     company_worker_count: companyWorkerCount,
     company_treasury_cents: Number(ownedCompany[0]?.treasury_cents ?? 0),
+    wanted_agent_id: wanted?.agent_id ?? null,
+    wanted_incident_id: wanted?.incident_id ?? null,
+    wanted_charge: wanted?.charge ?? null,
+    bounty_cents: wanted ? Number(wanted.bounty_cents) : 0,
     market_assets: marketAssets.map((asset) => ({
       ...asset,
       last_price_cents: Number(asset.last_price_cents),
@@ -794,7 +823,7 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
     }
     case 'accuse':
       if (action.target_agent_id !== agent.id) {
-        await accuseAgent(agent.id, action.target_agent_id, action.charge);
+        await accuseAgent(agent.id, action.target_agent_id, action.charge, action.incident_id ?? null);
       }
       return;
     default:

@@ -59,6 +59,7 @@ export const ActionSchema = z.discriminatedUnion('kind', [
     kind: z.literal('accuse'),
     target_agent_id: z.string().uuid(),
     charge: z.string(),
+    incident_id: z.string().uuid().optional(),
   }),
   z.object({
     kind: z.literal('found_company'),

@@ -113,6 +113,7 @@ function buildPrompt(agent: Agent, ctx: DecisionInput['context']): string {
     `STATE: hunger=${n.hunger.toFixed(0)} energy=${n.energy.toFixed(0)} life_sat=${n.life_satisfaction.toFixed(0)} balance=$${(agent.balance_cents / 100).toFixed(2)}`,
     `JOB: ${ctx.has_job ? 'employed' : 'unemployed'} HOME: ${ctx.has_home ? 'has home' : 'homeless'} FOOD ON HAND: ${ctx.food_qty}`,
     `BUSINESS: ${ctx.owned_company_id ? `owns company ${ctx.owned_company_id} with ${ctx.company_worker_count ?? 0} workers and $${((ctx.company_treasury_cents ?? 0) / 100).toFixed(0)} treasury` : 'does not own a company'}${ctx.hire_candidate_id ? `; nearby hire candidate ${ctx.hire_candidate_id}` : ''}${ctx.fire_candidate_id ? `; possible fire target ${ctx.fire_candidate_id}` : ''}`,
+    `WANTED: ${ctx.wanted_agent_id ? `${ctx.wanted_agent_id} can be accused on incident ${ctx.wanted_incident_id} (${ctx.wanted_charge ?? 'case'}), bounty $${((ctx.bounty_cents ?? 0) / 100).toFixed(0)}` : 'no nearby bounties'}`,
     `MARKET: ${(ctx.market_assets ?? [])
       .slice(0, 4)
       .map((a) => `${a.ticker} ${a.asset} last=$${(a.last_price_cents / 100).toFixed(2)} ask=${a.best_ask_cents ? `$${(a.best_ask_cents / 100).toFixed(2)}` : 'none'} bid=${a.best_bid_cents ? `$${(a.best_bid_cents / 100).toFixed(2)}` : 'none'}`)

@@ -29,6 +29,7 @@ const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   incident_witnessed: { label: 'witness', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   agent_accused: { label: 'accused', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
   court_verdict: { label: 'court', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
+  bounty_paid: { label: 'bounty', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   agent_jailed: { label: 'jailed', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
   agent_released: { label: 'released', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   city_founded: { label: 'civic', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
@@ -132,6 +133,8 @@ function describeEvent(e: { kind: string; payload: Record<string, unknown> }): s
       return `charged with ${String(p.charge ?? 'case')}`;
     case 'court_verdict':
       return `${p.guilty ? 'guilty' : 'not guilty'} on ${String(p.charge ?? 'case')}`;
+    case 'bounty_paid':
+      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} for the arrest`;
     case 'agent_jailed':
       return `${String(p.charge ?? 'case')} until ${p.jail_until ? new Date(String(p.jail_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'release'}`;
     case 'agent_released':

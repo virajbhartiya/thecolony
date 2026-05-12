@@ -1,7 +1,8 @@
 import { db, schema } from '@thecolony/db';
 import { eq, sql } from 'drizzle-orm';
-import type { WorldEventKind } from '@thecolony/domain';
+import { CITY_TREASURY_ID, type WorldEventKind } from '@thecolony/domain';
 import { writeEvent } from './event-writer';
+import { spendCityTreasury } from './government';
 
 const JAIL_SECONDS_PER_SEVERITY = 25;
 const COURT_LIMIT = 8;
@@ -23,6 +24,7 @@ interface IncidentRow extends Record<string, unknown> {
   victim_id: string | null;
   severity: number;
   warrants: number;
+  bounty_cents: number;
   amount_cents: number;
   evidence_count: number;
 }
@@ -72,7 +74,7 @@ export async function accuseAgent(
     ON CONFLICT (agent_id) DO UPDATE
       SET warrants = ${schema.legal_status.warrants} + 1,
           bounty_cents = CASE
-            WHEN ${schema.legal_status.warrants} + 1 >= 3
+            WHEN ${schema.legal_status.warrants} + 1 > 3
             THEN GREATEST(${schema.legal_status.bounty_cents}, (${schema.legal_status.warrants} + 1) * 500)
             ELSE ${schema.legal_status.bounty_cents}
           END,
@@ -90,6 +92,7 @@ export async function applyCourtSession(limit = COURT_LIMIT): Promise<number> {
   const rows = await db.execute<IncidentRow>(sql`
     SELECT i.id, i.kind, i.perp_id, i.victim_id, i.severity,
       COALESCE(l.warrants, 0)::int AS warrants,
+      COALESCE(l.bounty_cents, 0)::bigint AS bounty_cents,
       COALESCE((
         SELECT MAX((e.payload->>'amount_cents')::bigint)
         FROM ${schema.world_event} e
@@ -130,6 +133,7 @@ export async function applyCourtSession(limit = COURT_LIMIT): Promise<number> {
     const damages = damagesForIncident(incident.kind, Number(incident.amount_cents), Number(incident.severity));
     const paid = await payCivilDamages(incident.perp_id, incident.victim_id, damages);
     const debt = Math.max(0, damages - paid);
+    const bounty = await payBounty(incident.id, incident.perp_id, Number(incident.bounty_cents));
 
     await db.update(schema.incident).set({ resolved: true }).where(eq(schema.incident.id, incident.id));
     await db.execute(sql`
@@ -137,6 +141,7 @@ export async function applyCourtSession(limit = COURT_LIMIT): Promise<number> {
       VALUES (${incident.perp_id}, 0, ${debt}, ${jailUntilIso}::timestamptz, now())
       ON CONFLICT (agent_id) DO UPDATE
         SET warrants = 0,
+            bounty_cents = 0,
             debts_cents = ${schema.legal_status.debts_cents} + ${debt},
             jail_until = ${jailUntilIso}::timestamptz,
             updated_at = now()
@@ -154,6 +159,8 @@ export async function applyCourtSession(limit = COURT_LIMIT): Promise<number> {
         damages_cents: damages,
         paid_cents: paid,
         debt_cents: debt,
+        bounty_paid_cents: bounty.paid_cents,
+        bounty_hunter_id: bounty.hunter_id,
       },
     });
     await writeEvent({
@@ -165,6 +172,51 @@ export async function applyCourtSession(limit = COURT_LIMIT): Promise<number> {
     processed++;
   }
   return processed;
+}
+
+async function payBounty(
+  incidentId: string,
+  perpId: string,
+  bountyCents: number,
+): Promise<{ hunter_id: string | null; paid_cents: number }> {
+  if (bountyCents <= 0) return { hunter_id: null, paid_cents: 0 };
+
+  const rows = await db.execute<{ hunter_id: string }>(sql`
+    SELECT e.actor_ids[1] AS hunter_id
+    FROM ${schema.world_event} e
+    WHERE e.kind = 'agent_accused'
+      AND e.payload->>'incident_id' = ${incidentId}
+      AND e.actor_ids[2] = ${perpId}::uuid
+      AND e.actor_ids[1] <> ${perpId}::uuid
+    ORDER BY e.t DESC
+    LIMIT 1
+  `);
+  const hunterId = rows[0]?.hunter_id ?? null;
+  if (!hunterId) return { hunter_id: null, paid_cents: 0 };
+
+  const paid = await spendCityTreasury(bountyCents);
+  if (paid <= 0) return { hunter_id: hunterId, paid_cents: 0 };
+
+  await db
+    .update(schema.agent)
+    .set({ balance_cents: sql`${schema.agent.balance_cents} + ${paid}` })
+    .where(eq(schema.agent.id, hunterId));
+  await db.insert(schema.ledger_entry).values({
+    debit_kind: 'city',
+    debit_id: CITY_TREASURY_ID,
+    credit_kind: 'agent',
+    credit_id: hunterId,
+    amount_cents: paid,
+    reason: 'bounty',
+  });
+  await writeEvent({
+    kind: 'bounty_paid',
+    actor_ids: [hunterId, perpId],
+    importance: 8,
+    payload: { incident_id: incidentId, amount_cents: paid },
+  });
+
+  return { hunter_id: hunterId, paid_cents: paid };
 }
 
 export async function releaseJailedAgents(): Promise<number> {

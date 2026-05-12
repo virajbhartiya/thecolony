@@ -569,6 +569,8 @@ function headlineFor(kind: string, payload: Record<string, unknown>): string {
       return `Contract breach reported: $${money(payload.amount_cents)} disputed`;
     case 'court_verdict':
       return `${payload.guilty ? 'Guilty' : 'Not guilty'} verdict in ${String(payload.charge ?? 'case')}`;
+    case 'bounty_paid':
+      return `City Hall pays a $${money(payload.amount_cents)} bounty`;
     case 'agent_jailed':
       return `A citizen is jailed for ${String(payload.charge ?? 'a case')}`;
     case 'agent_released':

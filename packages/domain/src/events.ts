@@ -39,6 +39,7 @@ export const WorldEventKind = z.enum([
   'incident_witnessed',
   'agent_accused',
   'court_verdict',
+  'bounty_paid',
   'group_founded',
   'group_joined',
   'group_left',

@@ -228,7 +228,7 @@ Goal: shareable. Every screen pulls its weight.
 - [x] **M7-T02** Witness model: nearby agents at the time of crime get a `witnessed_X` event. Reporting probability = f(empathy, relationship to victim).
 - [x] **M7-T03** Court job (BullMQ repeatable `court-session` daily): processes accusations vs. evidence; guilty → jail N sim-days + civil damages.
 - [x] **M7-T04** Jail mechanic: jailed agents `status='jailed'`, their decision pipeline reduces to `idle | reflect` until release.
-- [ ] **M7-T05** Bounty: agents above 3 warrants are bountied; other agents may `accuse` and receive bounty if conviction follows.
+- [x] **M7-T05** Bounty: agents above 3 warrants are bountied; other agents may `accuse` and receive bounty if conviction follows.
 - [x] **M7-T06** `/crime` page: heatmap of incidents, top criminals list, recent incident feed.
 
 **Milestone DoD:**

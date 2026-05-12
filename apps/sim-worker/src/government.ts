@@ -65,6 +65,14 @@ export async function applyCivicCycle(): Promise<void> {
   await runElectionIfDue(afterAid);
 }
 
+export async function spendCityTreasury(amountCents: number): Promise<number> {
+  const state = await ensureGovernment();
+  const paid = Math.max(0, Math.min(Math.floor(amountCents), state.treasury_cents));
+  if (paid <= 0) return 0;
+  await writeGovernment({ ...state, treasury_cents: state.treasury_cents - paid });
+  return paid;
+}
+
 async function collectTaxes(state: GovernmentState): Promise<GovernmentState> {
   const taxpayers = await db.execute<{ id: string; name: string; balance_cents: number }>(sql`
     SELECT id, name, balance_cents

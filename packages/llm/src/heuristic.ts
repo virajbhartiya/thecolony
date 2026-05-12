@@ -32,6 +32,10 @@ export interface HeuristicContext {
   company_worker_count?: number;
   company_treasury_cents?: number;
   founder_pressure?: number;
+  wanted_agent_id?: string | null;
+  wanted_incident_id?: string | null;
+  wanted_charge?: string | null;
+  bounty_cents?: number;
   market_assets?: Array<{
     company_id: string;
     asset: string;
@@ -85,6 +89,22 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   const bal = agent.balance_cents;
   const ambition = agent.traits.ambition;
   const isBroker = (agent.occupation ?? '').toLowerCase().includes('broker');
+  const occupation = (agent.occupation ?? '').toLowerCase();
+  const isGuard = occupation.includes('guard') || occupation.includes('civil servant');
+
+  if (ctx.wanted_agent_id && ctx.wanted_incident_id) {
+    const bounty = ctx.bounty_cents ?? 0;
+    const civicDuty = isGuard ? 0.44 : 0.08;
+    const paidHunt = bounty > 0 && (bal < 4000 || greed > 0.55 || ambition > 0.65) ? 0.22 : 0;
+    if (rng() < civicDuty + paidHunt) {
+      return {
+        kind: 'accuse',
+        target_agent_id: ctx.wanted_agent_id,
+        charge: ctx.wanted_charge ?? 'outstanding warrant',
+        incident_id: ctx.wanted_incident_id,
+      };
+    }
+  }
 
   if (isBroker && (ctx.market_assets?.length ?? 0) > 0 && rng() < 0.42) {
     const holdings = ctx.share_holdings ?? [];

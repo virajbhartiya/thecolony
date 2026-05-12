@@ -167,6 +167,11 @@ export const useWorld = create<WorldState>((set, get) => ({
       case 'agent_jailed':
         floater(e.actor_ids[0]!, 'jailed', '#f85149');
         break;
+      case 'bounty_paid': {
+        const amt = Number(e.payload?.amount_cents ?? 0) / 100;
+        floater(e.actor_ids[0]!, `+$${amt.toFixed(0)} bounty`, '#7ee787');
+        break;
+      }
       case 'agent_released':
         floater(e.actor_ids[0]!, 'released', '#7ee787');
         break;

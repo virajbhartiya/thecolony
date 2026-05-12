@@ -279,6 +279,8 @@ function labelEvent(kind: string, payload: Record<string, unknown>): string {
       return `accused in ${String(payload.charge ?? 'a case')}`;
     case 'court_verdict':
       return `${payload.guilty ? 'guilty' : 'not guilty'} verdict`;
+    case 'bounty_paid':
+      return `collected bounty $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
     case 'agent_jailed':
       return `jailed until ${payload.jail_until ? new Date(String(payload.jail_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'release'}`;
     case 'agent_released':

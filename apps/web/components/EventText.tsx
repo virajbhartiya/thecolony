@@ -40,6 +40,8 @@ export function eventText(kind: string, payload: Record<string, unknown> = {}): 
       return `accused someone of ${String(payload.charge ?? 'a crime')}`;
     case 'court_verdict':
       return `${payload.guilty ? 'guilty' : 'not guilty'} verdict for ${String(payload.charge ?? 'case')}`;
+    case 'bounty_paid':
+      return `bounty paid: $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
     case 'agent_jailed':
       return `jailed for ${String(payload.charge ?? 'a case')}`;
     case 'agent_released':
