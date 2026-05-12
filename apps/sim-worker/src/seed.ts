@@ -5,7 +5,6 @@ import { CITY_TREASURY_ID } from '@thecolony/domain';
 import {
   applyProfessionBias,
   generateWorld,
-  genCompanyName,
   genName,
   genStarterNeeds,
   genTraits,
@@ -14,6 +13,7 @@ import {
   type ProfessionProfile,
 } from '@thecolony/sim';
 import { log } from './log';
+import { ensureEquityMarket } from './market';
 
 async function main() {
   log.info('seeding world');
@@ -25,6 +25,9 @@ async function main() {
     ${schema.city_state},
     ${schema.death_event},
     ${schema.birth_event},
+    ${schema.price_observation},
+    ${schema.share_holding},
+    ${schema.company_member},
     ${schema.market_order},
     ${schema.message},
     ${schema.conversation},
@@ -242,6 +245,7 @@ async function main() {
     importance: 8,
     payload: government,
   });
+  await ensureEquityMarket();
 
   log.info('seed complete');
 }
@@ -273,7 +277,21 @@ function industryForBuilding(kind: string): string {
 }
 
 function companyNameFor(kind: string, id: string, rng: () => number): string {
+  const district = pickOne(['Northbank', 'Riverside', 'Canal Row', 'Market Street', 'Old Mill', 'Civic Quarter'], rng);
+  const suffix = id.slice(0, 3).toUpperCase();
   switch (kind) {
+    case 'farm':
+      return `${district} Farms ${suffix}`;
+    case 'factory':
+      return `${district} Foundry ${suffix}`;
+    case 'water_works':
+      return `${district} Waterworks ${suffix}`;
+    case 'power_plant':
+      return `${district} Power & Light ${suffix}`;
+    case 'shop':
+      return `${district} Market ${suffix}`;
+    case 'bar':
+      return `${district} Public House ${suffix}`;
     case 'bank':
       return 'First Bank & Exchange';
     case 'office':
@@ -287,8 +305,12 @@ function companyNameFor(kind: string, id: string, rng: () => number): string {
     case 'temple':
       return 'Old Temple Trust';
     default:
-      return `${genCompanyName(rng)} ${id.slice(0, 3).toUpperCase()}`;
+      return `${district} Works ${suffix}`;
   }
+}
+
+function pickOne<T>(items: T[], rng: () => number): T {
+  return items[Math.floor(rng() * items.length)]!;
 }
 
 function rngForName(seed: string): () => number {

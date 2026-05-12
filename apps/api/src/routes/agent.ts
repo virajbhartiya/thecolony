@@ -73,6 +73,40 @@ export async function registerAgentRoutes(app: FastifyInstance) {
       ORDER BY it.key ASC
     `);
 
+    const holdings = await db.execute<{
+      company_id: string;
+      company: string;
+      ticker: string | null;
+      shares: number;
+      last_price_cents: number | null;
+      market_value_cents: number | null;
+    }>(sql`
+      SELECT sh.company_id, c.name AS company, c.ticker, sh.shares,
+        (
+          SELECT po.price_cents
+          FROM ${schema.price_observation} po
+          WHERE po.asset = ('shares:' || c.id::text)
+          ORDER BY po.t DESC
+          LIMIT 1
+        )::bigint AS last_price_cents,
+        (
+          sh.shares * COALESCE(
+            (
+              SELECT po.price_cents
+              FROM ${schema.price_observation} po
+              WHERE po.asset = ('shares:' || c.id::text)
+              ORDER BY po.t DESC
+              LIMIT 1
+            ),
+            100
+          )
+        )::bigint AS market_value_cents
+      FROM ${schema.share_holding} sh
+      JOIN ${schema.company} c ON c.id = sh.company_id
+      WHERE sh.agent_id = ${id} AND sh.shares > 0
+      ORDER BY market_value_cents DESC, c.name
+    `);
+
     const votes = await db
       .select({
         election_id: schema.city_vote.election_id,
@@ -85,7 +119,7 @@ export async function registerAgentRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.city_vote.t))
       .limit(5);
 
-    return { agent, employer, home, inventory, votes, recentEvents, memories, relationships: rels };
+    return { agent, employer, home, inventory, holdings, votes, recentEvents, memories, relationships: rels };
   });
 
   app.get('/v1/agents', async () => {

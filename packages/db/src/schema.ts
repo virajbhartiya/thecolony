@@ -162,6 +162,23 @@ export const ledger_entry = pgTable(
   }),
 );
 
+export const price_observation = pgTable(
+  'price_observation',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    t: timestamp('t', { withTimezone: true }).notNull().defaultNow(),
+    asset: text('asset').notNull(),
+    item_id: smallint('item_id'),
+    location_id: uuid('location_id'),
+    price_cents: bigint('price_cents', { mode: 'number' }).notNull(),
+    qty: integer('qty').notNull(),
+  },
+  (t) => ({
+    asset_t_idx: index('price_obs_asset_t_idx').on(t.asset, t.t),
+    item_t_idx: index('price_obs_item_t_idx').on(t.item_id, t.t),
+  }),
+);
+
 export const job = pgTable(
   'job',
   {
@@ -191,6 +208,34 @@ export const company = pgTable('company', {
   building_id: uuid('building_id'),
   industry: text('industry'),
 });
+
+export const company_member = pgTable(
+  'company_member',
+  {
+    agent_id: uuid('agent_id').notNull(),
+    company_id: uuid('company_id').notNull(),
+    role: text('role').notNull(),
+    joined_at: timestamp('joined_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.agent_id, t.company_id, t.role] }),
+    company_idx: index('company_member_company_idx').on(t.company_id),
+  }),
+);
+
+export const share_holding = pgTable(
+  'share_holding',
+  {
+    agent_id: uuid('agent_id').notNull(),
+    company_id: uuid('company_id').notNull(),
+    shares: bigint('shares', { mode: 'number' }).notNull().default(0),
+    updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.agent_id, t.company_id] }),
+    company_idx: index('share_holding_company_idx').on(t.company_id),
+  }),
+);
 
 export const conversation = pgTable('conversation', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -295,6 +340,7 @@ export const market_order = pgTable(
     ref_id: uuid('ref_id'),
     price_cents: bigint('price_cents', { mode: 'number' }).notNull(),
     qty: integer('qty').notNull(),
+    filled_qty: integer('filled_qty').notNull().default(0),
     ttl_t: timestamp('ttl_t', { withTimezone: true }),
     status: text('status').notNull().default('open'),
   },

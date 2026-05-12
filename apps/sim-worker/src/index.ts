@@ -7,11 +7,13 @@ import { decayNeedsAll, sweepDeaths } from './needs';
 import { applyPayroll, collectRent, applyDailyProduction } from './economy';
 import { spawnMigrantsIfNeeded } from './migrants';
 import { applyCivicCycle, ensureGovernment } from './government';
+import { clearMarketOrders, ensureEquityMarket } from './market';
 import { closePublisher } from './publisher';
 
 const TICK_MS = env().WORLD_TICK_MS;
 const MOVEMENT_MS = 250;
 const NEEDS_DECAY_EVERY_TICKS = 6; // every 6s
+const MARKET_EVERY_TICKS = 15;
 // Demo cadence: dailies fire every 60s real time so GDP/payroll/rent visibly move.
 const DAILY_EVERY_TICKS = 60;
 
@@ -19,6 +21,7 @@ let stopping = false;
 
 async function main() {
   await ensureGovernment();
+  await ensureEquityMarket();
   log.info(
     {
       llm: hasLLMKey() ? 'live (key detected)' : 'heuristic fallback (no key)',
@@ -42,12 +45,17 @@ async function main() {
         await decayNeedsAll();
         await sweepDeaths();
       }
+      if (tickCount % MARKET_EVERY_TICKS === 0) {
+        const trades = await clearMarketOrders();
+        if (trades > 0) log.info({ trades }, 'market clear');
+      }
       if (tickCount % DAILY_EVERY_TICKS === 0) {
         log.info('daily: production + payroll + rent + civic cycle + migrants');
         await applyDailyProduction();
         await applyPayroll();
         await collectRent();
         await applyCivicCycle();
+        await ensureEquityMarket();
         await spawnMigrantsIfNeeded();
       }
     } catch (e) {

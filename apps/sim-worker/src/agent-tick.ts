@@ -5,6 +5,7 @@ import type { Action, Agent } from '@thecolony/domain';
 import { mulberry32, hashStringSeed } from '@thecolony/sim';
 import { writeEvent } from './event-writer';
 import { log } from './log';
+import { shareAsset, tickerForCompany } from './market';
 
 const TICK_INTERVAL_MS = 60 * 1000; // 60s real seconds between decisions
 
@@ -113,6 +114,59 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     sql`SELECT COALESCE(qty,0) AS qty FROM ${schema.inventory} WHERE owner_kind='agent' AND owner_id=${agent.id} AND item_id=1`,
   );
 
+  const marketAssets = await db.execute<{
+    company_id: string;
+    asset: string;
+    ticker: string;
+    last_price_cents: number;
+    best_ask_cents: number | null;
+    best_bid_cents: number | null;
+  }>(sql`
+    SELECT c.id AS company_id,
+      ('shares:' || c.id::text) AS asset,
+      COALESCE(c.ticker, 'COL') AS ticker,
+      COALESCE(
+        (
+          SELECT po.price_cents
+          FROM ${schema.price_observation} po
+          WHERE po.asset = ('shares:' || c.id::text)
+          ORDER BY po.t DESC
+          LIMIT 1
+        ),
+        120
+      )::bigint AS last_price_cents,
+      (
+        SELECT MIN(o.price_cents)
+        FROM ${schema.market_order} o
+        WHERE o.asset = ('shares:' || c.id::text)
+          AND o.kind = 'sell'
+          AND o.status IN ('open','partial')
+          AND o.qty > o.filled_qty
+      )::bigint AS best_ask_cents,
+      (
+        SELECT MAX(o.price_cents)
+        FROM ${schema.market_order} o
+        WHERE o.asset = ('shares:' || c.id::text)
+          AND o.kind = 'buy'
+          AND o.status IN ('open','partial')
+          AND o.qty > o.filled_qty
+      )::bigint AS best_bid_cents
+    FROM ${schema.company} c
+    WHERE c.dissolved_at IS NULL AND c.ticker IS NOT NULL AND c.building_id IS NOT NULL
+    ORDER BY c.treasury_cents DESC
+    LIMIT 8
+  `);
+
+  const shareHoldings = await db.execute<{ company_id: string; asset: string; shares: number }>(sql`
+    SELECT sh.company_id,
+      ('shares:' || sh.company_id::text) AS asset,
+      sh.shares
+    FROM ${schema.share_holding} sh
+    WHERE sh.agent_id = ${agent.id} AND sh.shares > 0
+    ORDER BY sh.shares DESC
+    LIMIT 8
+  `);
+
   // nearest rich agent (balance > $20) — for stealing
   const richRow = await db.execute<{ id: string; balance_cents: number }>(sql`
     SELECT id, balance_cents
@@ -149,6 +203,13 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     owned_company_id: ownedCompany[0]?.id ?? null,
     hire_candidate_id: hireCandidateId,
     hire_role: hireRole,
+    market_assets: marketAssets.map((asset) => ({
+      ...asset,
+      last_price_cents: Number(asset.last_price_cents),
+      best_ask_cents: asset.best_ask_cents === null ? null : Number(asset.best_ask_cents),
+      best_bid_cents: asset.best_bid_cents === null ? null : Number(asset.best_bid_cents),
+    })),
+    share_holdings: shareHoldings.map((holding) => ({ ...holding, shares: Number(holding.shares) })),
   };
 }
 
@@ -295,6 +356,9 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
     case 'found_company': {
       const capital = Math.max(1000, Math.min(action.capital_cents, Number(agent.balance_cents)));
       if (capital < 1000) return;
+      const industry = String(action.charter.industry ?? 'office');
+      const workplace = await findVacantWorkplace(industry, agent, allBuildings);
+      if (!workplace) return;
       await db
         .update(schema.agent)
         .set({ balance_cents: sql`${schema.agent.balance_cents} - ${capital}` })
@@ -306,16 +370,31 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
           founder_id: agent.id,
           charter: action.charter,
           treasury_cents: capital,
-          industry: String(action.charter.industry ?? 'office'),
+          building_id: workplace.id,
+          industry,
         })
         .returning({ id: schema.company.id, name: schema.company.name });
       if (!company) return;
+      const ticker = tickerForCompany(company.name, company.id);
+      await db.update(schema.company).set({ ticker }).where(eq(schema.company.id, company.id));
       await db.insert(schema.job).values({
         agent_id: agent.id,
         company_id: company.id,
         role: 'founder',
         wage_cents: 0,
       });
+      await db.execute(sql`
+        INSERT INTO ${schema.company_member} (agent_id, company_id, role)
+        VALUES (${agent.id}, ${company.id}, 'founder'), (${agent.id}, ${company.id}, 'exec'), (${agent.id}, ${company.id}, 'shareholder')
+        ON CONFLICT DO NOTHING
+      `);
+      await db.execute(sql`
+        INSERT INTO ${schema.share_holding} (agent_id, company_id, shares)
+        VALUES (${agent.id}, ${company.id}, 1000)
+        ON CONFLICT (agent_id, company_id) DO UPDATE
+          SET shares = ${schema.share_holding.shares} + EXCLUDED.shares,
+              updated_at = now()
+      `);
       await db.update(schema.agent).set({ employer_id: company.id }).where(eq(schema.agent.id, agent.id));
       await db.insert(schema.ledger_entry).values({
         debit_kind: 'agent',
@@ -328,8 +407,100 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
       await writeEvent({
         kind: 'company_founded',
         actor_ids: [agent.id, company.id],
+        location_id: workplace.id,
         importance: 8,
-        payload: { name: company.name, capital_cents: capital },
+        payload: { name: company.name, ticker, capital_cents: capital, building: workplace.name },
+      });
+      await writeEvent({
+        kind: 'shares_issued',
+        actor_ids: [agent.id, company.id],
+        importance: 7,
+        payload: { company: company.name, ticker, shares: 1000, price_cents: 100 },
+      });
+      return;
+    }
+    case 'issue_shares': {
+      const [company] = await db.select().from(schema.company).where(eq(schema.company.id, action.company_id)).limit(1);
+      if (!company || company.founder_id !== agent.id || company.dissolved_at) return;
+      const shares = Math.max(1, Math.min(2500, action.shares));
+      const ticker = company.ticker ?? tickerForCompany(company.name, company.id);
+      if (!company.ticker) await db.update(schema.company).set({ ticker }).where(eq(schema.company.id, company.id));
+      await db.execute(sql`
+        INSERT INTO ${schema.share_holding} (agent_id, company_id, shares)
+        VALUES (${agent.id}, ${company.id}, ${shares})
+        ON CONFLICT (agent_id, company_id) DO UPDATE
+          SET shares = ${schema.share_holding.shares} + EXCLUDED.shares,
+              updated_at = now()
+      `);
+      await db.execute(sql`
+        INSERT INTO ${schema.company_member} (agent_id, company_id, role)
+        VALUES (${agent.id}, ${company.id}, 'shareholder')
+        ON CONFLICT DO NOTHING
+      `);
+      await db.insert(schema.market_order).values({
+        kind: 'sell',
+        asset: shareAsset(company.id),
+        agent_id: agent.id,
+        ref_id: company.id,
+        price_cents: action.price_cents,
+        qty: Math.min(50, shares),
+        ttl_t: new Date(Date.now() + 30 * 60_000),
+      });
+      await writeEvent({
+        kind: 'shares_issued',
+        actor_ids: [agent.id, company.id],
+        importance: 7,
+        payload: { company: company.name, ticker, shares, price_cents: action.price_cents },
+      });
+      return;
+    }
+    case 'place_order': {
+      const companyId = companyIdFromShareAsset(action.asset);
+      if (!companyId) return;
+      const [company] = await db.select().from(schema.company).where(eq(schema.company.id, companyId)).limit(1);
+      if (!company || company.dissolved_at) return;
+      const qty = Math.max(1, Math.min(100, action.qty));
+      const price = Math.max(1, Math.min(100_000, action.price_cents));
+
+      if (action.side === 'buy' && Number(agent.balance_cents) < qty * price) return;
+      if (action.side === 'sell') {
+        const owned = await db.execute<{ shares: number }>(sql`
+          SELECT shares FROM ${schema.share_holding}
+          WHERE agent_id = ${agent.id} AND company_id = ${company.id}
+          LIMIT 1
+        `);
+        const openSell = await db.execute<{ qty: number }>(sql`
+          SELECT COALESCE(SUM(qty - filled_qty), 0)::int AS qty
+          FROM ${schema.market_order}
+          WHERE agent_id = ${agent.id}
+            AND ref_id = ${company.id}
+            AND kind = 'sell'
+            AND status IN ('open','partial')
+        `);
+        if (Number(owned[0]?.shares ?? 0) - Number(openSell[0]?.qty ?? 0) < qty) return;
+      }
+
+      await db.insert(schema.market_order).values({
+        kind: action.side,
+        asset: shareAsset(company.id),
+        agent_id: agent.id,
+        ref_id: company.id,
+        price_cents: price,
+        qty,
+        ttl_t: new Date(Date.now() + 15 * 60_000),
+      });
+      await db.update(schema.agent).set({ state: 'trading' }).where(eq(schema.agent.id, agent.id));
+      await writeEvent({
+        kind: 'order_placed',
+        actor_ids: [agent.id, company.id],
+        importance: 4,
+        payload: {
+          side: action.side,
+          asset: shareAsset(company.id),
+          ticker: company.ticker ?? tickerForCompany(company.name, company.id),
+          qty,
+          price_cents: price,
+        },
       });
       return;
     }
@@ -455,6 +626,53 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
       await db.update(schema.agent).set({ state: 'idle' }).where(eq(schema.agent.id, agent.id));
       return;
   }
+}
+
+function companyIdFromShareAsset(asset: string): string | null {
+  return asset.startsWith('shares:') ? asset.slice('shares:'.length) : null;
+}
+
+async function findVacantWorkplace(industry: string, agent: Agent, allBuildings: BuildingRow[]): Promise<BuildingRow | null> {
+  const occupiedRows = await db.execute<{ building_id: string }>(sql`
+    SELECT building_id
+    FROM ${schema.company}
+    WHERE dissolved_at IS NULL AND building_id IS NOT NULL
+  `);
+  const occupied = new Set(occupiedRows.map((row) => row.building_id));
+  const allowed = workplaceKindsForIndustry(industry);
+  const candidates = allBuildings
+    .filter((building) => allowed.includes(building.kind))
+    .sort((a, b) => distanceToAgent(a, agent) - distanceToAgent(b, agent));
+  return candidates.find((building) => !occupied.has(building.id)) ?? candidates[0] ?? null;
+}
+
+function workplaceKindsForIndustry(industry: string): string[] {
+  switch (industry) {
+    case 'farm':
+      return ['farm'];
+    case 'factory':
+      return ['factory'];
+    case 'shop':
+      return ['shop'];
+    case 'bar':
+      return ['bar'];
+    case 'bank':
+      return ['bank', 'office'];
+    case 'court':
+      return ['court', 'town_hall', 'office'];
+    case 'town_hall':
+      return ['town_hall', 'office'];
+    case 'water_works':
+      return ['water_works'];
+    case 'power_plant':
+      return ['power_plant'];
+    default:
+      return ['office', 'shop', 'factory'];
+  }
+}
+
+function distanceToAgent(building: BuildingRow, agent: Agent): number {
+  return Math.hypot(building.tile_x - agent.pos_x, building.tile_y - agent.pos_y);
 }
 
 function wageForOccupation(occupation: string | null | undefined): number {

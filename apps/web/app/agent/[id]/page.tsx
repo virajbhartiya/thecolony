@@ -25,6 +25,7 @@ interface AgentDetail {
   employer: { id: string; name: string; industry: string | null; treasury_cents: number } | null;
   home: { id: string; name: string; kind: string; rent_cents: number } | null;
   inventory: Array<{ key: string; qty: number }>;
+  holdings: Array<{ company_id: string; company: string; ticker: string | null; shares: number; last_price_cents: number | null; market_value_cents: number | null }>;
   votes: Array<{ election_id: string; reason: string; t: string }>;
   recentEvents: Array<{ id: number; t: string; kind: string; payload: Record<string, unknown> }>;
   memories: Array<{ id: number; t: string; kind: string; summary: string; salience: number }>;
@@ -86,6 +87,17 @@ export default function AgentPage() {
                 </span>
               ))}
               {detail.inventory.length === 0 && <span className="text-sm text-zinc-500">No inventory.</span>}
+            </div>
+            <h2 className="mt-5 text-sm font-semibold">Holdings</h2>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {detail.holdings.map((h) => (
+                <Metric
+                  key={h.company_id}
+                  label={h.ticker ?? h.company}
+                  value={`${h.shares} sh · ${money(h.market_value_cents ?? 0)}`}
+                />
+              ))}
+              {detail.holdings.length === 0 && <span className="text-sm text-zinc-500">No shares.</span>}
             </div>
           </Panel>
 

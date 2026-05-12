@@ -210,11 +210,11 @@ Goal: shareable. Every screen pulls its weight.
 
 ## M6 — Companies & markets
 
-- [ ] **M6-T01** Add `company`, `company_member`, `share_holding`, `market_order` schemas.
-- [ ] **M6-T02** `found_company` action: requires min capital. Creates company row, charter, founder as exec.
+- [x] **M6-T01** Add `company`, `company_member`, `share_holding`, `market_order` schemas.
+- [x] **M6-T02** `found_company` action: requires min capital. Creates company row, charter, founder as exec.
 - [ ] **M6-T03** `hire` / `fire` actions; companies emit job postings; `seek_job` matches against postings.
-- [ ] **M6-T04** `issue_shares` action; once issued past threshold, company appears on `/market`.
-- [ ] **M6-T05** Market clearer (BullMQ repeatable every 15 sim-min): price-time priority match, write trades to ledger, update share holdings, emit `trade` events.
+- [x] **M6-T04** `issue_shares` action; once issued past threshold, company appears on `/market`.
+- [x] **M6-T05** Market clearer (BullMQ repeatable every 15 sim-min): price-time priority match, write trades to ledger, update share holdings, emit `trade` events.
 - [ ] **M6-T06** `/market` page: list public companies with price sparklines, order book preview, top movers.
 
 **Milestone DoD:**
@@ -284,6 +284,7 @@ Goal: shareable. Every screen pulls its weight.
 > Add notes here when the spec is ambiguous or assumptions break. Format: `[task-id] question — what you did instead`.
 
 - _(empty)_
+- [M6-T05] market cadence — implemented as a 15-tick worker cadence for the demo-speed world, preserving the same order-clearing behavior while the sim is running at accelerated local demo pace.
 
 ---
 

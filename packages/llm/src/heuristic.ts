@@ -29,6 +29,15 @@ export interface HeuristicContext {
   hire_candidate_id?: string | null;
   hire_role?: string | null;
   founder_pressure?: number;
+  market_assets?: Array<{
+    company_id: string;
+    asset: string;
+    ticker: string;
+    last_price_cents: number;
+    best_ask_cents: number | null;
+    best_bid_cents: number | null;
+  }>;
+  share_holdings?: Array<{ company_id: string; asset: string; shares: number }>;
 }
 
 // Tiny RNG factory so the heuristic is deterministic per agent-tick if needed.
@@ -71,6 +80,36 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   const empathy = agent.traits.empathy;
   const bal = agent.balance_cents;
   const ambition = agent.traits.ambition;
+  const isBroker = (agent.occupation ?? '').toLowerCase().includes('broker');
+
+  if (isBroker && (ctx.market_assets?.length ?? 0) > 0 && rng() < 0.42) {
+    const holdings = ctx.share_holdings ?? [];
+    const sellable = holdings.filter((h) => h.shares >= 5);
+    if (sellable.length > 0 && rng() < 0.45) {
+      const holding = pick(sellable, rng);
+      const asset = ctx.market_assets?.find((a) => a.company_id === holding.company_id);
+      const price = Math.max(80, Math.floor((asset?.last_price_cents ?? asset?.best_ask_cents ?? 120) * (1.04 + rng() * 0.12)));
+      return {
+        kind: 'place_order',
+        side: 'sell',
+        asset: holding.asset,
+        qty: Math.min(12, Math.max(1, Math.floor(holding.shares / 4))),
+        price_cents: price,
+      };
+    }
+    if (bal > 2500) {
+      const asset = pick(ctx.market_assets!, rng);
+      const anchor = asset.best_ask_cents ?? asset.last_price_cents ?? 120;
+      const price = Math.max(50, Math.floor(anchor * (0.92 + rng() * 0.18)));
+      return {
+        kind: 'place_order',
+        side: 'buy',
+        asset: asset.asset,
+        qty: Math.max(1, Math.min(10, Math.floor(bal / Math.max(price * 6, 1)))),
+        price_cents: price,
+      };
+    }
+  }
 
   if (ctx.owned_company_id && ctx.hire_candidate_id && rng() < ambition * 0.45) {
     return {

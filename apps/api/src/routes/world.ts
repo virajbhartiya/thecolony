@@ -44,9 +44,12 @@ export async function registerWorldRoutes(app: FastifyInstance) {
       .from(schema.agent)
       .where(sql`status <> 'dead'`);
 
-    const gdpRow = await db.execute<{ gdp: number | null }>(
-      sql`SELECT COALESCE(SUM(balance_cents)::bigint, 0)::bigint AS gdp FROM ${schema.agent} WHERE status <> 'dead'`,
-    );
+    const gdpRow = await db.execute<{ gdp: number | null }>(sql`
+      SELECT (
+        (SELECT COALESCE(SUM(balance_cents)::bigint, 0)::bigint FROM ${schema.agent} WHERE status <> 'dead') +
+        (SELECT COALESCE(SUM(treasury_cents)::bigint, 0)::bigint FROM ${schema.company} WHERE dissolved_at IS NULL)
+      )::bigint AS gdp
+    `);
     const gdp_cents = Number(gdpRow[0]?.gdp ?? 0);
     const governmentRows = await db
       .select({ value: schema.city_state.value })

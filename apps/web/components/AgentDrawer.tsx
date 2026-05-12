@@ -23,6 +23,7 @@ interface AgentDetail {
   employer: { id: string; name: string; industry: string | null; treasury_cents: number } | null;
   home: { id: string; name: string; kind: string; rent_cents: number } | null;
   inventory: Array<{ key: string; qty: number }>;
+  holdings: Array<{ company_id: string; company: string; ticker: string | null; shares: number; market_value_cents: number | null }>;
   votes: Array<{ election_id: string; candidate_id: string; reason: string; t: string }>;
   recentEvents: Array<{ id: number; t: string; kind: string; payload: Record<string, unknown> }>;
   memories: Array<{ id: number; t: string; kind: string; summary: string; salience: number }>;
@@ -145,6 +146,17 @@ export default function AgentDrawer() {
                   </span>
                 ))}
                 {detail.inventory.length === 0 && <span className="text-zinc-500">no inventory</span>}
+              </div>
+              <div className="border-t border-white/10 pt-1.5">
+                <span className="text-zinc-500">shares</span>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {detail.holdings.slice(0, 4).map((holding) => (
+                    <span key={holding.company_id} className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5">
+                      {holding.ticker ?? holding.company} {holding.shares}
+                    </span>
+                  ))}
+                  {detail.holdings.length === 0 && <span className="text-zinc-500">none</span>}
+                </div>
               </div>
             </div>
           </section>

@@ -151,11 +151,16 @@ export async function registerCityRoutes(app: FastifyInstance) {
       id: string;
       name: string;
       industry: string | null;
+      ticker: string | null;
       treasury_cents: number;
       founder_id: string | null;
       workers: number;
       payroll_cents: number;
       inventory_qty: number;
+      shares_outstanding: number;
+      last_price_cents: number | null;
+      previous_price_cents: number | null;
+      open_orders: number;
     }>(sql`
       WITH worker_stats AS (
         SELECT company_id, COUNT(*)::int AS workers, COALESCE(SUM(wage_cents), 0)::bigint AS payroll_cents
@@ -168,15 +173,45 @@ export async function registerCityRoutes(app: FastifyInstance) {
         FROM ${schema.inventory}
         WHERE owner_kind = 'company'
         GROUP BY owner_id
+      ),
+      share_stats AS (
+        SELECT company_id, COALESCE(SUM(shares), 0)::bigint AS shares_outstanding
+        FROM ${schema.share_holding}
+        GROUP BY company_id
+      ),
+      price_rank AS (
+        SELECT asset, price_cents, t, ROW_NUMBER() OVER (PARTITION BY asset ORDER BY t DESC) AS rn
+        FROM ${schema.price_observation}
+      ),
+      price_stats AS (
+        SELECT asset,
+          MAX(price_cents) FILTER (WHERE rn = 1)::bigint AS last_price_cents,
+          MAX(price_cents) FILTER (WHERE rn = 2)::bigint AS previous_price_cents
+        FROM price_rank
+        WHERE rn <= 2
+        GROUP BY asset
+      ),
+      order_stats AS (
+        SELECT ref_id AS company_id, COUNT(*)::int AS open_orders
+        FROM ${schema.market_order}
+        WHERE status IN ('open','partial') AND qty > filled_qty
+        GROUP BY ref_id
       )
-      SELECT c.id, c.name, c.industry, c.treasury_cents, c.founder_id,
+      SELECT c.id, c.name, c.industry, c.ticker, c.treasury_cents, c.founder_id,
         COALESCE(ws.workers, 0)::int AS workers,
         COALESCE(ws.payroll_cents, 0)::bigint AS payroll_cents,
-        COALESCE(inv.inventory_qty, 0)::int AS inventory_qty
+        COALESCE(inv.inventory_qty, 0)::int AS inventory_qty,
+        COALESCE(ss.shares_outstanding, 0)::bigint AS shares_outstanding,
+        ps.last_price_cents,
+        ps.previous_price_cents,
+        COALESCE(os.open_orders, 0)::int AS open_orders
       FROM ${schema.company} c
       LEFT JOIN worker_stats ws ON ws.company_id = c.id
       LEFT JOIN inventory_stats inv ON inv.company_id = c.id
-      WHERE c.dissolved_at IS NULL
+      LEFT JOIN share_stats ss ON ss.company_id = c.id
+      LEFT JOIN price_stats ps ON ps.asset = ('shares:' || c.id::text)
+      LEFT JOIN order_stats os ON os.company_id = c.id
+      WHERE c.dissolved_at IS NULL AND c.building_id IS NOT NULL
       ORDER BY c.treasury_cents DESC
     `);
 
@@ -186,7 +221,12 @@ export async function registerCityRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.ledger_entry.t))
       .limit(60);
     const orders = await db.select().from(schema.market_order).orderBy(desc(schema.market_order.t)).limit(50);
-    return { companies, recentLedger, orders };
+    const trades = await db
+      .select()
+      .from(schema.price_observation)
+      .orderBy(desc(schema.price_observation.t))
+      .limit(60);
+    return { companies, recentLedger, orders, trades };
   });
 
   app.get('/v1/crime', async () => {

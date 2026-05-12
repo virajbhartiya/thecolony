@@ -16,6 +16,9 @@ const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   agent_moved: { label: 'move', tone: 'text-zinc-500 border-zinc-700/30 bg-white/[0.02]' },
   agent_worked: { label: 'work', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
   company_founded: { label: 'company', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
+  shares_issued: { label: 'shares', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
+  order_placed: { label: 'order', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
+  trade_executed: { label: 'trade', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   agent_spawned: { label: 'born', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   migrant_arrived: { label: 'migrant', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   incident_theft: { label: 'theft', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
@@ -97,6 +100,12 @@ function describeEvent(e: { kind: string; payload: Record<string, unknown> }): s
       return `as ${String(p.role ?? 'worker')} at ${String(p.company ?? 'a company')}`;
     case 'company_founded':
       return `${String(p.name ?? 'company')} by ${String(p.founder ?? 'founder')}`;
+    case 'shares_issued':
+      return `${String(p.ticker ?? p.company ?? 'company')} ${String(p.shares ?? '?')} shares`;
+    case 'order_placed':
+      return `${String(p.side ?? 'order')} ${String(p.ticker ?? p.asset ?? 'shares')} $${(Number(p.price_cents ?? 0) / 100).toFixed(2)} x ${String(p.qty ?? '?')}`;
+    case 'trade_executed':
+      return `${String(p.ticker ?? p.asset ?? 'shares')} $${(Number(p.price_cents ?? 0) / 100).toFixed(2)} x ${String(p.qty ?? '?')}`;
     case 'agent_moved':
       return `to ${String(p.to ?? '...')}`;
     case 'agent_homed':

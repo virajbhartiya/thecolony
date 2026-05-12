@@ -131,6 +131,15 @@ export const useWorld = create<WorldState>((set, get) => ({
       case 'city_tax_collected':
         for (const id of e.actor_ids.slice(0, 5)) floater(id, 'tax', '#f0c84a');
         break;
+      case 'order_placed':
+        floater(e.actor_ids[0]!, String(e.payload?.side ?? 'order'), '#f0c84a');
+        break;
+      case 'trade_executed': {
+        const amt = Number(e.payload?.amount_cents ?? 0) / 100;
+        floater(e.actor_ids[0]!, `-$${amt.toFixed(0)}`, '#f0883e');
+        floater(e.actor_ids[1]!, `+$${amt.toFixed(0)}`, '#7ee787');
+        break;
+      }
       case 'agent_evicted':
         floater(e.actor_ids[0]!, 'evicted', '#f85149');
         break;
