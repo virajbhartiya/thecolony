@@ -48,6 +48,8 @@ interface LeaderRow {
   balance_cents?: number;
   score?: number;
   warrants?: number;
+  incidents?: number;
+  severity?: number;
 }
 
 interface Leaderboards {
@@ -203,12 +205,12 @@ export default function EventTicker() {
         />
         <Leaderboard
           title="Most Notorious"
-          tag="warrants"
+          tag="rap-sheet severity"
           rows={
             leaderboards?.notorious.slice(0, 5).map((r) => ({
               id: r.id,
               name: r.name,
-              v: `${r.warrants ?? 0}`,
+              v: `${r.incidents ?? 0} · sev ${r.severity ?? 0}`,
               accent: '#9b7fd1',
             })) ?? []
           }

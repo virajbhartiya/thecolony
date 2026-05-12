@@ -45,16 +45,16 @@
 
 * { box-sizing: border-box; }
 
-html, body, #__next { height: 100%; margin: 0; padding: 0; }
+html, body, #__next { margin: 0; padding: 0; min-height: 100%; }
 body {
   background: var(--ink-0);
   color: var(--cream);
   font-family: 'Space Grotesk', system-ui, sans-serif;
   font-size: 13px;
   letter-spacing: 0.01em;
-  overflow: hidden;
   overscroll-behavior: none;
 }
+body.live-fullscreen { overflow: hidden; height: 100vh; }
 
 .pixel { font-family: 'Silkscreen', monospace; letter-spacing: 0.04em; }
 .mono  { font-family: 'JetBrains Mono', monospace; }

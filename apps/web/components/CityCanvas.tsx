@@ -12,6 +12,7 @@ import {
 import TileDiamond from './sprites/TileDiamond';
 import BuildingSprite from './sprites/BuildingSprite';
 import AgentSprite from './sprites/AgentSprite';
+import Decorations from './sprites/Decorations';
 
 const VIEWBOX_W = 1400;
 const VIEWBOX_H = 900;
@@ -48,14 +49,16 @@ export default function CityCanvas({ className }: { className?: string }) {
   const [, force] = useState(0);
   useEffect(() => {
     let raf = 0;
-    const SPEED = 0.6;
+    const BASE_SPEED = 0.6;
     let prev = performance.now();
     const tick = () => {
       const now = performance.now();
       const dt = (now - prev) / 1000;
       prev = now;
-      const moveDelta = SPEED * dt;
-      const agentsMap = useWorld.getState().agents;
+      const state = useWorld.getState();
+      const pauseFactor = state.paused ? 0 : 1;
+      const moveDelta = BASE_SPEED * state.speed * pauseFactor * dt;
+      const agentsMap = state.agents;
       const map = localPos.current;
       for (const [id, a] of agentsMap) {
         let lp = map.get(id);
@@ -63,6 +66,7 @@ export default function CityCanvas({ className }: { className?: string }) {
           lp = { x: a.pos_x, y: a.pos_y };
           map.set(id, lp);
         }
+        if (moveDelta <= 0) continue;
         const tx = a.target_x;
         const ty = a.target_y;
         const dx = tx - lp.x;
@@ -149,31 +153,27 @@ export default function CityCanvas({ className }: { className?: string }) {
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 && e.button !== 1) return;
+    // Don't capture — let child SVG elements receive their own click events.
+    // We only set dragging state and decide pan vs click based on movement distance.
     dragging.current = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
-    try {
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-    } catch {
-      /* ignore capture failure */
-    }
   };
   const onPointerMove = (e: React.PointerEvent) => {
     const d = dragging.current;
     if (!d) return;
     const cx = e.clientX;
     const cy = e.clientY;
+    // Only pan if we've moved beyond a small threshold — otherwise this is a click.
+    const dx = cx - d.x;
+    const dy = cy - d.y;
+    if (Math.abs(dx) < 3 && Math.abs(dy) < 3) return;
     setView((v) => ({
       ...v,
-      x: d.vx + (cx - d.x),
-      y: d.vy + (cy - d.y),
+      x: d.vx + dx,
+      y: d.vy + dy,
     }));
   };
-  const onPointerUp = (e: React.PointerEvent) => {
+  const onPointerUp = () => {
     dragging.current = null;
-    try {
-      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-    } catch {
-      /* ignore */
-    }
   };
   const onPointerLeave = () => {
     dragging.current = null;
@@ -190,6 +190,16 @@ export default function CityCanvas({ className }: { className?: string }) {
   const dayPhase = dayPhaseFromSimTime(simTime);
   const tint = nightTintForPhase(dayPhase);
   const lit = isLitWindows(dayPhase);
+
+  // wealth percentiles (recomputed on each agents update, cheap with ~30 rows)
+  const wealthSorted = useMemo(() => {
+    const arr = Array.from(agents.values())
+      .map((a) => a.balance_cents)
+      .sort((a, b) => a - b);
+    return arr;
+  }, [agents]);
+  const wealthP20 = wealthSorted[Math.floor(wealthSorted.length * 0.2)] ?? 0;
+  const wealthP80 = wealthSorted[Math.floor(wealthSorted.length * 0.8)] ?? Infinity;
 
   const buildingHeat = (kind: string) => {
     if (heatMode === 'crime') {
@@ -208,8 +218,14 @@ export default function CityCanvas({ className }: { className?: string }) {
   };
   const agentHeatFor = (a: { balance_cents: number; status: string }) => {
     if (heatMode === 'wealth') {
-      if (a.balance_cents > 500_000) return { color: '#95b876', alpha: 1 };
-      if (a.balance_cents < 0) return { color: '#9b7fd1', alpha: 1 };
+      // top 20% richest = green, bottom 20% = violet, in-between = none
+      // computed against the live agents map
+      if (a.balance_cents <= 0) return { color: '#9b7fd1', alpha: 1 };
+      if (a.balance_cents >= wealthP80) return { color: '#95b876', alpha: 1 };
+      if (a.balance_cents <= wealthP20) return { color: '#9b7fd1', alpha: 0.85 };
+    }
+    if (heatMode === 'crime' && a.status === 'jailed') {
+      return { color: '#e2536e', alpha: 1 };
     }
     return null;
   };
@@ -302,6 +318,14 @@ export default function CityCanvas({ className }: { className?: string }) {
             {groundTiles.tiles.map((t) => (
               <TileDiamond key={`g${t.tx},${t.ty}`} tx={t.tx} ty={t.ty} fill={t.fill} />
             ))}
+
+            <Decorations
+              width={width || 96}
+              height={height || 96}
+              buildings={buildings}
+              lit={lit}
+              nowMs={performance.now()}
+            />
 
             {[...buildings]
               .sort((a, b) => a.tile_x + a.tile_y - (b.tile_x + b.tile_y))

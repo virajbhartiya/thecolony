@@ -99,8 +99,85 @@ export async function registerWorldRoutes(app: FastifyInstance) {
   });
 
   app.get('/v1/world/terrain', async () => {
-    // Terrain is deterministic from seed — re-derive on the client for free.
-    // We expose only metadata here for now; renderer regenerates terrain locally.
     return { seed: 42, width: MAP_WIDTH, height: MAP_HEIGHT };
+  });
+
+  // True 24h windowed metrics — backs the TopBar so values reflect the
+  // actual database, not whatever happens to be in the client's events buffer.
+  let metricsCache: { t: number; data: unknown } | null = null;
+  const METRICS_CACHE_MS = 5_000;
+  app.get('/v1/world/metrics', async () => {
+    const now = Date.now();
+    if (metricsCache && now - metricsCache.t < METRICS_CACHE_MS) return metricsCache.data;
+
+    const [counts] = await db.execute<{
+      total_events: number;
+      crime_24h: number;
+      deaths_24h: number;
+      births_24h: number;
+      hires_24h: number;
+      fires_24h: number;
+      evictions_24h: number;
+      wages_24h_cents: number;
+      rent_24h_cents: number;
+      thefts_24h_amount_cents: number;
+      trades_24h: number;
+      orders_24h: number;
+      group_founded_24h: number;
+      company_founded_24h: number;
+    }>(sql`
+      SELECT
+        (SELECT COUNT(*)::int FROM ${schema.world_event}) AS total_events,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours'
+            AND kind IN ('incident_theft','incident_assault','incident_fraud','incident_breach')) AS crime_24h,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind = 'agent_died') AS deaths_24h,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind IN ('birth','migrant_arrived')) AS births_24h,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind = 'agent_hired') AS hires_24h,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind = 'agent_fired') AS fires_24h,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind = 'agent_evicted') AS evictions_24h,
+        (SELECT COALESCE(SUM(amount_cents)::bigint, 0)::bigint FROM ${schema.ledger_entry}
+          WHERE t > now() - interval '24 hours' AND reason = 'wage') AS wages_24h_cents,
+        (SELECT COALESCE(SUM(amount_cents)::bigint, 0)::bigint FROM ${schema.ledger_entry}
+          WHERE t > now() - interval '24 hours' AND reason = 'rent') AS rent_24h_cents,
+        (SELECT COALESCE(SUM((payload->>'amount_cents')::bigint), 0)::bigint FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind = 'incident_theft') AS thefts_24h_amount_cents,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind = 'trade_executed') AS trades_24h,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind = 'order_placed') AS orders_24h,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind = 'group_founded') AS group_founded_24h,
+        (SELECT COUNT(*)::int FROM ${schema.world_event}
+          WHERE t > now() - interval '24 hours' AND kind = 'company_founded') AS company_founded_24h
+    `);
+
+    const [outstanding] = await db.execute<{ warrants_outstanding: number; jailed_now: number; bankrupt_now: number }>(sql`
+      SELECT
+        (SELECT COALESCE(SUM(warrants)::int, 0)::int FROM ${schema.legal_status}) AS warrants_outstanding,
+        (SELECT COUNT(*)::int FROM ${schema.agent} WHERE status = 'jailed') AS jailed_now,
+        (SELECT COUNT(*)::int FROM ${schema.agent} WHERE status = 'bankrupt') AS bankrupt_now
+    `);
+
+    const [satisfaction] = await db.execute<{ avg_life_satisfaction: number }>(sql`
+      SELECT COALESCE(AVG((needs->>'life_satisfaction')::float), 50)::int AS avg_life_satisfaction
+      FROM ${schema.agent} WHERE status = 'alive'
+    `);
+
+    const mood_index = Math.round((Number(satisfaction?.avg_life_satisfaction ?? 50) - 50));
+
+    const data = {
+      ...counts,
+      ...outstanding,
+      mood_index,
+      avg_life_satisfaction: Number(satisfaction?.avg_life_satisfaction ?? 50),
+    };
+    metricsCache = { t: now, data };
+    return data;
   });
 }

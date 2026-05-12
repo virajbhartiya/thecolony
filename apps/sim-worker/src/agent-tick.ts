@@ -400,6 +400,39 @@ export async function applyAction(
         importance: 4,
         payload: { body: action.body, to: action.to },
       });
+      // Positive social interaction: bump mutual affinity with nearest neighbours.
+      // Empathic, sociable agents create stronger bonds; speech to 'nearby' only.
+      if (action.to === 'nearby') {
+        const neighbours = await db.execute<{ id: string }>(sql`
+          SELECT id FROM ${schema.agent}
+          WHERE status = 'alive' AND id <> ${agent.id}
+            AND ((pos_x - ${agent.pos_x})^2 + (pos_y - ${agent.pos_y})^2) < 9
+          ORDER BY ((pos_x - ${agent.pos_x})^2 + (pos_y - ${agent.pos_y})^2) ASC
+          LIMIT 3
+        `);
+        const empathy = Number(agent.traits.empathy ?? 0.5);
+        const sociability = Number(agent.traits.sociability ?? 0.5);
+        const bump = Math.max(1, Math.round((empathy + sociability) * 3));
+        for (const n of neighbours) {
+          // Both directions; tag the edge.
+          await db.execute(sql`
+            INSERT INTO ${schema.agent_relationship} (subj_id, obj_id, affinity, trust, last_interaction_t, tags)
+            VALUES (${agent.id}, ${n.id}, ${bump}, ${Math.floor(bump / 2)}, now(), ARRAY['acquaintance'])
+            ON CONFLICT (subj_id, obj_id) DO UPDATE
+              SET affinity = LEAST(100, ${schema.agent_relationship.affinity} + ${bump}),
+                  trust    = LEAST(100, ${schema.agent_relationship.trust} + ${Math.floor(bump / 2)}),
+                  last_interaction_t = now()
+          `);
+          await db.execute(sql`
+            INSERT INTO ${schema.agent_relationship} (subj_id, obj_id, affinity, trust, last_interaction_t, tags)
+            VALUES (${n.id}, ${agent.id}, ${bump}, ${Math.floor(bump / 2)}, now(), ARRAY['acquaintance'])
+            ON CONFLICT (subj_id, obj_id) DO UPDATE
+              SET affinity = LEAST(100, ${schema.agent_relationship.affinity} + ${bump}),
+                  trust    = LEAST(100, ${schema.agent_relationship.trust} + ${Math.floor(bump / 2)}),
+                  last_interaction_t = now()
+          `);
+        }
+      }
       return;
     }
     case 'work': {

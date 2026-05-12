@@ -9,6 +9,8 @@ import EventTicker from '../components/EventTicker';
 import BottomBar from '../components/BottomBar';
 import AgentDrawer from '../components/AgentDrawer';
 import BuildingDrawer from '../components/BuildingDrawer';
+import GovernmentCard from '../components/GovernmentCard';
+import CityPulse from '../components/CityPulse';
 
 export default function Home() {
   const loadSnapshot = useWorld((s) => s.loadSnapshot);
@@ -23,6 +25,13 @@ export default function Home() {
   const [bootstrapped, setBootstrapped] = useState(false);
 
   useWorldStream();
+
+  // The live view is a fullscreen fixed canvas — lock the body scroll while
+  // we're on /, restore it on unmount so /feed /market /news scroll normally.
+  useEffect(() => {
+    document.body.classList.add('live-fullscreen');
+    return () => document.body.classList.remove('live-fullscreen');
+  }, []);
 
   useEffect(() => {
     let stopped = false;
@@ -70,6 +79,8 @@ export default function Home() {
       <CityCanvas />
       <div className="scanlines" />
       <HUD />
+      <GovernmentCard />
+      <CityPulse />
       <EventTicker />
       <BottomBar />
       {selectedAgentId && <AgentDrawer />}

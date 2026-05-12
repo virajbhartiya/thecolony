@@ -12,6 +12,7 @@ type Row = {
   score?: number;
   warrants?: number;
   severity?: number;
+  incidents?: number;
 };
 
 interface Leaderboards {
@@ -44,7 +45,7 @@ export default function LeaderboardsPage() {
           <Board title="Richest" tag="net worth" rows={data.richest ?? []} value={(r) => money(r.balance_cents)} accent="#95b876" />
           <Board title="Most Loved" tag="aggregate affinity" rows={data.loved ?? []} value={(r) => `+${r.score ?? 0}`} accent="#95b876" />
           <Board title="Most Hated" tag="aggregate affinity" rows={data.hated ?? []} value={(r) => `${r.score ?? 0}`} accent="#e2536e" />
-          <Board title="Most Notorious" tag="warrants" rows={data.notorious ?? []} value={(r) => `${r.warrants ?? r.severity ?? 0}`} accent="#9b7fd1" />
+          <Board title="Most Notorious" tag="rap-sheet severity" rows={data.notorious ?? []} value={(r) => `${r.incidents ?? 0} crimes · sev ${r.severity ?? 0}`} accent="#9b7fd1" />
         </div>
       )}
     </PageChrome>

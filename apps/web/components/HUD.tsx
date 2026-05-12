@@ -1,7 +1,30 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useWorld } from '../lib/store';
+import { fetchEndpoint } from '../lib/api';
+
+interface Metrics {
+  total_events: number;
+  crime_24h: number;
+  deaths_24h: number;
+  births_24h: number;
+  hires_24h: number;
+  fires_24h: number;
+  evictions_24h: number;
+  wages_24h_cents: number;
+  rent_24h_cents: number;
+  thefts_24h_amount_cents: number;
+  trades_24h: number;
+  orders_24h: number;
+  group_founded_24h: number;
+  company_founded_24h: number;
+  warrants_outstanding: number;
+  jailed_now: number;
+  bankrupt_now: number;
+  mood_index: number;
+  avg_life_satisfaction: number;
+}
 
 const NAV: Array<[string, string]> = [
   ['/', 'Live'],
@@ -51,33 +74,27 @@ export default function HUD() {
   const connected = useWorld((s) => s.connected);
   const paused = useWorld((s) => s.paused);
   const speed = useWorld((s) => s.speed);
-  const events = useWorld((s) => s.events);
 
-  const crime24h = useMemo(
-    () => events.filter((e) => e.kind.startsWith('incident_')).length,
-    [events],
-  );
-  const deaths24h = useMemo(
-    () => events.filter((e) => e.kind === 'agent_died').length,
-    [events],
-  );
-  const warrants = useMemo(
-    () => events.filter((e) => e.kind === 'agent_accused' || e.kind === 'incident_theft' || e.kind === 'incident_assault').length,
-    [events],
-  );
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    const tick = () =>
+      fetchEndpoint<Metrics>('/v1/world/metrics')
+        .then((m) => !stopped && setMetrics(m))
+        .catch(() => {});
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, []);
 
-  // mood index — coarse approximation from event mix
-  const mood = useMemo(() => {
-    const happy = events.filter((e) =>
-      ['agent_paid_wage', 'agent_hired', 'agent_ate', 'agent_homed', 'group_joined', 'birth'].includes(e.kind),
-    ).length;
-    const sad = events.filter((e) =>
-      ['agent_died', 'agent_evicted', 'agent_fired', 'incident_theft', 'incident_assault', 'agent_bankrupt'].includes(
-        e.kind,
-      ),
-    ).length;
-    return happy - sad;
-  }, [events]);
+  const crime24h = metrics?.crime_24h ?? 0;
+  const deaths24h = metrics?.deaths_24h ?? 0;
+  const warrants = metrics?.warrants_outstanding ?? 0;
+  const mood = metrics?.mood_index ?? 0;
+  const tick = metrics?.total_events ?? 0;
 
   const [wallTime, setWallTime] = useState('');
   useEffect(() => {
@@ -88,8 +105,6 @@ export default function HUD() {
     setWallTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
     return () => clearInterval(id);
   }, []);
-
-  const tick = events[0]?.id ?? 0;
 
   return (
     <div
