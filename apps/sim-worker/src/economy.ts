@@ -99,6 +99,94 @@ export async function collectRent(): Promise<void> {
   }
 }
 
+/**
+ * Daily utility bills — every housed agent owes the water_works and the
+ * power_plant for that day. Money flows agent → utility company treasury.
+ * If they can't pay, hunger spikes (water cut off) and a utility_unpaid event
+ * is logged.
+ */
+export async function applyUtilityBills(): Promise<void> {
+  const utilities = await db
+    .select({
+      id: schema.company.id,
+      name: schema.company.name,
+      industry: schema.company.industry,
+    })
+    .from(schema.company)
+    .where(sql`industry IN ('water_works', 'power_plant') AND dissolved_at IS NULL`);
+
+  // pick one of each if available
+  const waterCo = utilities.find((u) => u.industry === 'water_works');
+  const powerCo = utilities.find((u) => u.industry === 'power_plant');
+  if (!waterCo && !powerCo) return;
+
+  const housed = await db.execute<{ id: string; home_id: string; balance_cents: number }>(sql`
+    SELECT id, home_id, balance_cents
+    FROM ${schema.agent}
+    WHERE status = 'alive' AND home_id IS NOT NULL
+  `);
+
+  const WATER_BILL = 80; // cents = $0.80/day
+  const POWER_BILL = 120; // cents = $1.20/day
+  for (const r of housed) {
+    const bal = Number(r.balance_cents);
+    let billed = 0;
+    if (waterCo && bal - billed >= WATER_BILL) {
+      billed += WATER_BILL;
+      await db.update(schema.company)
+        .set({ treasury_cents: sql`${schema.company.treasury_cents} + ${WATER_BILL}` })
+        .where(eq(schema.company.id, waterCo.id));
+      await db.insert(schema.ledger_entry).values({
+        debit_kind: 'agent',
+        debit_id: r.id,
+        credit_kind: 'company',
+        credit_id: waterCo.id,
+        amount_cents: WATER_BILL,
+        reason: 'water_bill',
+      });
+    } else if (waterCo) {
+      // water cut off — surge hunger because they can't drink
+      await db.execute(sql`
+        UPDATE ${schema.agent}
+        SET needs = jsonb_set(needs, '{hunger}', to_jsonb(LEAST(100, (needs->>'hunger')::float + 15)))
+        WHERE id = ${r.id}
+      `);
+      await writeEvent({
+        kind: 'utility_unpaid',
+        actor_ids: [r.id],
+        importance: 4,
+        payload: { utility: 'water', amount_cents: WATER_BILL, balance_cents: bal },
+      });
+    }
+    if (powerCo && bal - billed >= POWER_BILL) {
+      billed += POWER_BILL;
+      await db.update(schema.company)
+        .set({ treasury_cents: sql`${schema.company.treasury_cents} + ${POWER_BILL}` })
+        .where(eq(schema.company.id, powerCo.id));
+      await db.insert(schema.ledger_entry).values({
+        debit_kind: 'agent',
+        debit_id: r.id,
+        credit_kind: 'company',
+        credit_id: powerCo.id,
+        amount_cents: POWER_BILL,
+        reason: 'power_bill',
+      });
+    } else if (powerCo) {
+      await writeEvent({
+        kind: 'utility_unpaid',
+        actor_ids: [r.id],
+        importance: 4,
+        payload: { utility: 'power', amount_cents: POWER_BILL, balance_cents: bal },
+      });
+    }
+    if (billed > 0) {
+      await db.update(schema.agent)
+        .set({ balance_cents: sql`${schema.agent.balance_cents} - ${billed}` })
+        .where(eq(schema.agent.id, r.id));
+    }
+  }
+}
+
 export async function applyDailyProduction(): Promise<void> {
   // simple: each producing company adds 5 of its primary good × number of workers
   const companies = await db

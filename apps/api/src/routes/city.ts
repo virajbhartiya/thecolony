@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { db, schema } from '@thecolony/db';
-import { desc, eq, sql } from 'drizzle-orm';
+import { desc, eq, sql, inArray } from 'drizzle-orm';
 
 export async function registerCityRoutes(app: FastifyInstance) {
   app.get('/v1/buildings', async () => {
@@ -635,17 +635,59 @@ export async function registerCityRoutes(app: FastifyInstance) {
       .from(schema.world_event)
       .where(sql`${schema.world_event.importance} >= 5`)
       .orderBy(desc(schema.world_event.t))
-      .limit(60);
+      .limit(80);
 
-    const headlines = events.slice(0, 12).map((event) => ({
+    // Look up the names of every actor + every location referenced in this
+    // batch so headlines can use proper names instead of UUIDs.
+    const actorIds = new Set<string>();
+    const locationIds = new Set<string>();
+    for (const e of events) {
+      for (const id of e.actor_ids ?? []) actorIds.add(id);
+      if (e.location_id) locationIds.add(e.location_id);
+    }
+    const actorList = Array.from(actorIds);
+    const locationList = Array.from(locationIds);
+    const actorRows = actorList.length
+      ? await db
+          .select({ id: schema.agent.id, name: schema.agent.name })
+          .from(schema.agent)
+          .where(inArray(schema.agent.id, actorList))
+      : [];
+    const locationRows = locationList.length
+      ? await db
+          .select({ id: schema.building.id, name: schema.building.name, kind: schema.building.kind })
+          .from(schema.building)
+          .where(inArray(schema.building.id, locationList))
+      : [];
+    const actorName: Record<string, string> = {};
+    for (const a of actorRows) actorName[a.id] = a.name;
+    const locName: Record<string, string> = {};
+    const locKind: Record<string, string> = {};
+    for (const b of locationRows) {
+      locName[b.id] = b.name;
+      locKind[b.id] = b.kind;
+    }
+
+    const enriched = events.map((event) => ({
       id: event.id,
       t: event.t,
-      title: headlineFor(event.kind, event.payload as Record<string, unknown>),
       kind: event.kind,
       importance: event.importance,
+      actor_ids: event.actor_ids,
+      location_id: event.location_id,
       payload: event.payload,
+      actor_names: (event.actor_ids ?? []).map((id) => actorName[id] ?? null),
+      location_name: event.location_id ? locName[event.location_id] ?? null : null,
+      location_kind: event.location_id ? locKind[event.location_id] ?? null : null,
+      title: richHeadlineFor(
+        event.kind,
+        event.payload as Record<string, unknown>,
+        (event.actor_ids ?? []).map((id) => actorName[id] ?? null),
+        event.location_id ? locName[event.location_id] ?? null : null,
+      ),
     }));
 
+    const headlines = enriched.slice(0, 24);
     return {
       headlines,
       events,
@@ -653,6 +695,89 @@ export async function registerCityRoutes(app: FastifyInstance) {
       latestReport: reports[0]?.value ?? null,
     };
   });
+}
+
+/**
+ * Richer newspaper-style title generator. Uses real names + buildings when
+ * they're available so headlines stop reading like "trade executed".
+ */
+function richHeadlineFor(
+  kind: string,
+  payload: Record<string, unknown>,
+  actors: Array<string | null>,
+  location: string | null,
+): string {
+  const A = actors[0] ?? (payload.name as string | undefined) ?? 'A citizen';
+  const B = actors[1] ?? null;
+  const at = location ? ` at ${location}` : '';
+  switch (kind) {
+    case 'mayor_elected':
+      return `${A} wins City Hall`;
+    case 'city_tax_collected':
+      return `City Hall collects $${money(payload.amount_cents)} in taxes from ${String(payload.taxpayer_count ?? 'citizens')} citizens`;
+    case 'company_founded':
+      return `${A} opens "${String(payload.name ?? 'a new venture')}"`;
+    case 'company_dissolved':
+      return `"${String(payload.company_name ?? 'a company')}" collapses with founder ${String(payload.founder_name ?? A)} — share price crashes`;
+    case 'shares_issued':
+      return `${String(payload.company ?? 'A company')} issues ${String(payload.shares ?? '?')} shares at $${money(payload.price_cents)}`;
+    case 'trade_executed':
+      return `${String(payload.qty ?? '?')} shares of ${String(payload.company ?? payload.ticker ?? 'a stock')} trade at $${money(payload.price_cents)}`;
+    case 'order_placed':
+      return `${A} places a ${String(payload.side ?? 'limit')} order on ${String(payload.ticker ?? 'a stock')}`;
+    case 'job_posted':
+      return `${String(payload.company ?? 'A company')} is hiring ${String(payload.role ?? 'workers')}`;
+    case 'agent_hired':
+      return `${A} hired as ${String(payload.role ?? 'a worker')} at ${String(payload.company ?? 'a new role')}`;
+    case 'agent_fired':
+      return `${A} fired from ${String(payload.company ?? 'a job')}`;
+    case 'group_founded':
+      return `${A} founds "${String(payload.name ?? 'a faction')}" — a ${String(payload.kind ?? 'group')}`;
+    case 'group_joined':
+      return `${A} joins ${String(payload.name ?? 'a faction')}`;
+    case 'group_left':
+      return `${A} leaves ${String(payload.name ?? 'a faction')}`;
+    case 'agent_evicted':
+      return `${A} evicted${at} — rent $${money(payload.rent)}/day`;
+    case 'agent_homed':
+      return `${A} moves into ${String(payload.building ?? location ?? 'a home')}`;
+    case 'agent_died':
+      return `Obituary: ${A} dies of ${String(payload.cause ?? 'unknown causes')}`;
+    case 'agent_bankrupt':
+      return `${A} declares bankruptcy`;
+    case 'birth':
+      return `${A} enters civic life`;
+    case 'migrant_arrived':
+      return `New arrival: ${A}`;
+    case 'incident_theft':
+      return `${A} steals $${money(payload.amount_cents)}${B ? ` from ${B}` : ''}${at}`;
+    case 'incident_assault':
+      return `${A} assaults ${B ?? 'someone'}${at}`;
+    case 'incident_fraud':
+      return `${A} defrauds ${B ?? 'a citizen'} of $${money(payload.amount_cents)}`;
+    case 'incident_breach':
+      return `Contract breach: ${A} owes ${B ?? 'a counterparty'} $${money(payload.amount_cents)}`;
+    case 'court_verdict':
+      return `${A} found ${payload.guilty ? 'GUILTY' : 'not guilty'} of ${String(payload.charge ?? 'a charge')}`;
+    case 'bounty_paid':
+      return `${A} earns $${money(payload.amount_cents)} bounty`;
+    case 'agent_jailed':
+      return `${A} jailed for ${String(payload.charge ?? 'a crime')}`;
+    case 'agent_released':
+      return `${A} released from prison`;
+    case 'agent_accused':
+      return `${A} accuses ${B ?? 'a citizen'} of ${String(payload.charge ?? 'wrongdoing')}`;
+    case 'building_proposed':
+      return `${A} breaks ground on a new ${String(payload.building_kind ?? 'building')}: "${String(payload.name ?? 'project')}"`;
+    case 'building_opened':
+      return `"${String(payload.name ?? 'A new building')}" opens for business`;
+    case 'news_headline':
+      return String(payload.title ?? payload.headline ?? 'The Daily Ledger publishes a city report');
+    case 'agent_broadcast':
+      return `${A} broadcasts: "${String(payload.body ?? '').slice(0, 100)}"`;
+    default:
+      return `${A} · ${kind.replace(/_/g, ' ')}`;
+  }
 }
 
 function headlineFor(kind: string, payload: Record<string, unknown>): string {

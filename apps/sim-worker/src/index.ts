@@ -4,7 +4,7 @@ import { log } from './log';
 import { tickDueAgents } from './agent-tick';
 import { stepMovement } from './movement';
 import { decayNeedsAll, sweepDeaths } from './needs';
-import { applyPayroll, collectRent, applyDailyProduction } from './economy';
+import { applyPayroll, collectRent, applyDailyProduction, applyUtilityBills } from './economy';
 import { spawnMigrantsIfNeeded } from './migrants';
 import { advanceConstruction } from './construction';
 import { applyCivicCycle, ensureGovernment } from './government';
@@ -74,6 +74,7 @@ async function main() {
         await applyDailyProduction();
         await applyPayroll();
         await collectRent();
+        await applyUtilityBills();
         await applyCivicCycle();
         await ensureEquityMarket();
         await ensureJobPostings();

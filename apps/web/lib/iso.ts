@@ -15,14 +15,21 @@ export function worldToTile(wx: number, wy: number): { tx: number; ty: number } 
 }
 
 /**
- * Sim-time-of-day phase 0..1 from a Date or ISO string.
- * 0 = midnight, 0.25 = dawn, 0.5 = noon, 0.75 = dusk.
- * Pulls only the time-of-day component.
+ * Sim-time-of-day phase 0..1.
+ *   0   = midnight
+ *   0.25 = dawn
+ *   0.5 = noon
+ *   0.75 = dusk
+ *
+ * Driven by elapsed real time from a fixed epoch so the city visibly
+ * passes through a full day every 24 real minutes — otherwise the
+ * camera would be locked at whatever UTC hour the demo is running.
  */
-export function dayPhaseFromSimTime(t: string | Date | null | undefined): number {
-  if (!t) return 0.5;
-  const d = typeof t === 'string' ? new Date(t) : t;
-  if (Number.isNaN(d.getTime())) return 0.5;
-  const minutes = d.getUTCHours() * 60 + d.getUTCMinutes();
-  return (minutes % 1440) / 1440;
+const SIM_DAY_REAL_MS = 24 * 60 * 1000;
+const SIM_EPOCH = Date.UTC(2026, 0, 1, 0, 0, 0);
+
+export function dayPhaseFromSimTime(_t?: string | Date | null): number {
+  void _t;
+  const elapsed = Date.now() - SIM_EPOCH;
+  return (((elapsed % SIM_DAY_REAL_MS) + SIM_DAY_REAL_MS) % SIM_DAY_REAL_MS) / SIM_DAY_REAL_MS;
 }
