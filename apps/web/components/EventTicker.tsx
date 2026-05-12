@@ -3,6 +3,7 @@ import { useWorld } from '../lib/store';
 
 const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   agent_died: { label: 'death', tone: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
+  agent_bankrupt: { label: 'bankrupt', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
   agent_evicted: { label: 'evicted', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
   agent_homed: { label: 'housing', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   agent_hired: { label: 'hired', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
@@ -22,6 +23,7 @@ const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   trade_executed: { label: 'trade', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   agent_spawned: { label: 'born', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   migrant_arrived: { label: 'migrant', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  birth: { label: 'birth', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   incident_theft: { label: 'theft', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
   incident_assault: { label: 'assault', tone: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
   incident_fraud: { label: 'fraud', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
@@ -94,6 +96,10 @@ function describeEvent(e: { kind: string; payload: Record<string, unknown> }): s
       return `"${String(p.body ?? '').slice(0, 80)}"`;
     case 'agent_died':
       return `cause: ${String(p.cause ?? 'unknown')}`;
+    case 'agent_bankrupt':
+      return `debts exceeded survival cash`;
+    case 'birth':
+      return `${String(p.name ?? 'new citizen')}`;
     case 'agent_paid_wage':
       return `+$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)}`;
     case 'agent_paid_rent':

@@ -251,10 +251,10 @@ Goal: shareable. Every screen pulls its weight.
 
 ## M9 — Permadeath, descent, legacy
 
-- [ ] **M9-T01** All death causes from SPEC §7.6 implemented and surfaced as distinct death_event causes.
-- [ ] **M9-T02** Conception model: two cohabiting agents with affinity > 60 + age window → daily small probability of conception → child active at age 18 sim-years with parent-blended traits.
-- [ ] **M9-T03** Obituary generator: on death, one `gpt-4o` call writes a 4–6 sentence eulogy; stored on `death_event.eulogy`.
-- [ ] **M9-T04** `/history` page: chronological timeline of high-importance events + obituaries grid for the dead.
+- [x] **M9-T01** All death causes from SPEC §7.6 implemented and surfaced as distinct death_event causes.
+- [x] **M9-T02** Conception model: two cohabiting agents with affinity > 60 + age window → daily small probability of conception → child active at age 18 sim-years with parent-blended traits.
+- [x] **M9-T03** Obituary generator: on death, one `gpt-4o` call writes a 4–6 sentence eulogy; stored on `death_event.eulogy`.
+- [x] **M9-T04** `/history` page: chronological timeline of high-importance events + obituaries grid for the dead.
 
 **Milestone DoD:**
 - The first 5 obituaries are good enough to share as screenshots.
@@ -287,6 +287,8 @@ Goal: shareable. Every screen pulls its weight.
 - [M6-T05] market cadence — implemented as a 15-tick worker cadence for the demo-speed world, preserving the same order-clearing behavior while the sim is running at accelerated local demo pace.
 - [M7-T03] court cadence — implemented as a 30-tick worker cadence for the demo-speed world instead of a daily BullMQ repeatable job; the same court resolution path runs while local sim time is intentionally accelerated.
 - [M8-T04] belief cadence — implemented as a 90-tick worker cadence for the demo-speed world instead of a weekly BullMQ job; it still writes durable belief memories and shifts `traits.ideology_lean`.
+- [M9-T01] lifecycle cadence — old-age, suicide, and bankruptcy checks run on the existing needs heartbeat in local demo mode so consequences are visible during product testing.
+- [M9-T02] conception cadence — conception is attempted during the accelerated 60-tick daily cycle; conceived children become active age-18 citizens immediately to make generational arcs inspectable in the running city.
 
 ---
 
@@ -296,3 +298,5 @@ Goal: shareable. Every screen pulls its weight.
 
 - [M7-T03] Court runs on the sim-worker heartbeat every 30 ticks in local demo mode instead of a daily BullMQ repeatable job, so crime arcs are visible during product testing.
 - [M8-T04] Belief updates run on the sim-worker heartbeat every 90 ticks in local demo mode instead of weekly, so factions and voting drift are visible during a short demo.
+- [M9-T01] Lifecycle checks share the needs heartbeat in local demo mode instead of a separate BullMQ death sweep, while death events remain durable and cause-specific.
+- [M9-T02] Conception uses the accelerated daily worker cadence and starts descendants at age 18 so the product can show inherited traits and family continuity without waiting real weeks.

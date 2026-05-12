@@ -11,6 +11,7 @@ import { clearMarketOrders, ensureEquityMarket } from './market';
 import { ensureJobPostings } from './workforce';
 import { applyCourtSession, releaseJailedAgents } from './justice';
 import { applyBeliefUpdates } from './groups';
+import { applyConceptions, sweepLifecycle } from './lifecycle';
 import { closePublisher } from './publisher';
 
 const TICK_MS = env().WORLD_TICK_MS;
@@ -50,6 +51,7 @@ async function main() {
       if (tickCount % NEEDS_DECAY_EVERY_TICKS === 0) {
         await decayNeedsAll();
         await sweepDeaths();
+        await sweepLifecycle();
         const released = await releaseJailedAgents();
         if (released > 0) log.info({ released }, 'jail release');
       }
@@ -74,6 +76,8 @@ async function main() {
         await ensureEquityMarket();
         await ensureJobPostings();
         await spawnMigrantsIfNeeded();
+        const births = await applyConceptions();
+        if (births > 0) log.info({ births }, 'births');
       }
     } catch (e) {
       log.error({ err: (e as Error).message }, 'tick error');

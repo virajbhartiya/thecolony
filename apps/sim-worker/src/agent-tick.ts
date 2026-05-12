@@ -9,6 +9,7 @@ import { shareAsset, tickerForCompany } from './market';
 import { roleForIndustry, wageForRole } from './workforce';
 import { accuseAgent, createIncident } from './justice';
 import { foundGroup, joinGroup, leaveGroup, loadGroupContext } from './groups';
+import { markAgentDead } from './lifecycle';
 
 const TICK_INTERVAL_MS = 60 * 1000; // 60s real seconds between decisions
 
@@ -762,6 +763,10 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
               trust    = LEAST(100, GREATEST(-100, ${schema.agent_relationship.trust} - 60)),
               tags     = ARRAY['assaulted_by']
       `);
+      const lethalChance = severity >= 5 ? Math.max(0.08, agent.traits.risk * 0.18 + agent.traits.greed * 0.08 - agent.traits.empathy * 0.08) : 0;
+      if (lethalChance > 0 && Math.random() < lethalChance) {
+        await markAgentDead(target.id, 'violence');
+      }
       return;
     }
     case 'fraud': {

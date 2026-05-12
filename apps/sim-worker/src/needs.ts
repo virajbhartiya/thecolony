@@ -1,6 +1,6 @@
 import { db, schema } from '@thecolony/db';
-import { sql, eq } from 'drizzle-orm';
-import { writeEvent } from './event-writer';
+import { sql } from 'drizzle-orm';
+import { markAgentDead } from './lifecycle';
 
 // needs decay runs every NEEDS_DECAY_EVERY_TICKS = 6 seconds.
 // Target: hunger 0 -> 100 in ~25 real minutes of NOT eating
@@ -41,16 +41,6 @@ export async function sweepDeaths(): Promise<void> {
         LIMIT 1`,
   );
   for (const row of starving) {
-    await db
-      .update(schema.agent)
-      .set({ status: 'dead', state: 'dead', died_at: new Date() })
-      .where(eq(schema.agent.id, row.id));
-    await db.insert(schema.death_event).values({ agent_id: row.id, cause: 'starvation' });
-    await writeEvent({
-      kind: 'agent_died',
-      actor_ids: [row.id],
-      importance: 8,
-      payload: { cause: 'starvation', name: row.name },
-    });
+    await markAgentDead(row.id, 'starvation');
   }
 }

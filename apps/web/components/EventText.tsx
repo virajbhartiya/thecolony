@@ -52,6 +52,10 @@ export function eventText(kind: string, payload: Record<string, unknown> = {}): 
       return `joined ${String(payload.name ?? 'a group')}`;
     case 'group_left':
       return `left ${String(payload.name ?? 'a group')}`;
+    case 'birth':
+      return `${String(payload.name ?? 'A new citizen')} entered civic life`;
+    case 'agent_bankrupt':
+      return `declared bankrupt`;
     case 'agent_died':
       return `died from ${String(payload.cause ?? 'unknown causes')}`;
     default:

@@ -187,6 +187,12 @@ export const useWorld = create<WorldState>((set, get) => ({
       case 'agent_died':
         floater(e.actor_ids[0]!, '✝', '#888');
         break;
+      case 'agent_bankrupt':
+        floater(e.actor_ids[0]!, 'bankrupt', '#f0c84a');
+        break;
+      case 'birth':
+        floater(e.actor_ids[0]!, 'new citizen', '#7ee787');
+        break;
     }
     const events = [e, ...get().events].slice(0, 200);
     set({ agents, events });

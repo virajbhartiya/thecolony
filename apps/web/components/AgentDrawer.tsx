@@ -291,6 +291,10 @@ function labelEvent(kind: string, payload: Record<string, unknown>): string {
       return `joined ${String(payload.name ?? 'a group')}`;
     case 'group_left':
       return `left ${String(payload.name ?? 'a group')}`;
+    case 'birth':
+      return `entered civic life`;
+    case 'agent_bankrupt':
+      return `declared bankrupt`;
     case 'agent_died':
       return `died (${String(payload.cause ?? '…')})`;
     default:

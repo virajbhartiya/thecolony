@@ -524,7 +524,21 @@ export async function registerCityRoutes(app: FastifyInstance) {
       .where(sql`${schema.world_event.importance} >= 7`)
       .orderBy(desc(schema.world_event.t))
       .limit(100);
-    return { deaths, timeline };
+
+    const births = await db.execute<{
+      agent_id: string;
+      name: string | null;
+      t: string;
+      kind: string;
+      parent_ids: string[] | null;
+    }>(sql`
+      SELECT b.agent_id, a.name, b.t, b.kind, b.parent_ids
+      FROM ${schema.birth_event} b
+      LEFT JOIN ${schema.agent} a ON a.id = b.agent_id
+      ORDER BY b.t DESC
+      LIMIT 80
+    `);
+    return { deaths, births, timeline };
   });
 
   app.get('/v1/news', async () => {
@@ -572,6 +586,8 @@ function headlineFor(kind: string, payload: Record<string, unknown>): string {
       return `Eviction at $${money(payload.rent)} daily rent`;
     case 'agent_died':
       return `${String(payload.name ?? 'A citizen')} dies from ${String(payload.cause ?? 'unknown causes')}`;
+    case 'birth':
+      return `${String(payload.name ?? 'A new citizen')} enters civic life`;
     case 'incident_theft':
       return `Theft reported: $${money(payload.amount_cents)} stolen`;
     case 'incident_assault':
