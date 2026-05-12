@@ -1,0 +1,35 @@
+# TheColony — TLS reverse proxy.
+#
+# We use 43-204-159-8.sslip.io which resolves to 43.204.159.8 automatically,
+# so Caddy can auto-issue a Let's Encrypt cert without you owning a domain.
+# Replace the host with your real domain when you have one.
+
+43-204-159-8.sslip.io {
+    encode zstd gzip
+
+    # Health
+    @health path /v1/health
+    handle @health {
+        reverse_proxy localhost:4001
+    }
+
+    # WebSocket upgrade
+    @ws {
+        path /v1/events/stream
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    handle @ws {
+        reverse_proxy localhost:4001
+    }
+
+    # Everything else
+    handle {
+        reverse_proxy localhost:4001
+    }
+
+    log {
+        output stdout
+        format console
+    }
+}

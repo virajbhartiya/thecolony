@@ -1,0 +1,19 @@
+[Unit]
+Description=TheColony API (Fastify + WS)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=RUNUSER
+WorkingDirectory=/REPO
+EnvironmentFile=/REPO/.env
+ExecStart=/usr/bin/pnpm --filter @thecolony/api exec tsx src/index.ts
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=colony-api
+
+[Install]
+WantedBy=multi-user.target

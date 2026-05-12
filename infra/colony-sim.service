@@ -1,0 +1,19 @@
+[Unit]
+Description=TheColony sim-worker (long-running tick + decisions)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=RUNUSER
+WorkingDirectory=/REPO
+EnvironmentFile=/REPO/.env
+ExecStart=/usr/bin/pnpm --filter @thecolony/sim-worker exec tsx src/index.ts
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=colony-sim
+
+[Install]
+WantedBy=multi-user.target
