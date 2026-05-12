@@ -26,8 +26,8 @@ export async function decide(input: DecisionInput): Promise<DecisionOutput> {
   }
   recordCall();
   try {
-    const llm = await import('./openai-decide');
-    return await llm.llmDecide(input);
+    const llm = await import('./provider-decide');
+    return await llm.providerDecide(input);
   } catch (e) {
     const msg = (e as Error).message ?? '';
     if (!msg.includes('Rate limit')) {

@@ -9,7 +9,7 @@ Open `http://localhost:3000` after the steps below. Click an agent or building t
 - ~30 AI agents wander a 96×96 isometric city.
 - They eat, sleep, look for jobs, rent apartments, pay rent, get evicted, talk to each other, build reputations, occasionally die.
 - The simulation is the source of truth — the frontend renders what the backend says is happening, in real time over WebSocket.
-- Without an `OPENAI_API_KEY`, agents decide using a deterministic heuristic policy (still feels alive). Add a key and they become LLM-driven (`gpt-4o-mini` default, `gpt-4o` for big decisions).
+- Without a provider key, agents decide using a deterministic heuristic policy (still feels alive). Add `OPENAI_API_KEY`, `AI_GATEWAY_API_KEY`, or `GEMINI_API_KEY` and they become LLM-driven (`gpt-4o-mini` default, Gemini fallback when configured).
 
 For the full design read `SPEC.md`. For the build progress and milestones read `TODO.md`.
 
@@ -52,7 +52,7 @@ packages/
   domain/       shared TS types, zod schemas, action vocabulary
   db/           Drizzle schema + migrations
   sim/          pure logic (worldgen, pathfinding, names, traits, time)
-  llm/          decide()/embed() — heuristic fallback + OpenAI path
+  llm/          decide()/embed() — heuristic fallback + OpenAI/Gemini path
   config/       env loader (auto-discovers .env up the tree)
 infra/
   docker-compose.yml
@@ -62,10 +62,12 @@ infra/
 
 ```bash
 echo "OPENAI_API_KEY=sk-..." >> .env
+# or
+echo "GEMINI_API_KEY=..." >> .env
 # restart sim-worker
 ```
 
-The `decide()` function automatically routes through the LLM when a key is present. No code changes needed.
+The `decide()` function automatically routes through the first configured provider in `LLM_PROVIDER_ORDER`. Defaults keep `openai/gpt-4o-mini` primary and use `google/gemini-2.5-flash` when Gemini is the available provider. No code changes needed.
 
 ## License
 

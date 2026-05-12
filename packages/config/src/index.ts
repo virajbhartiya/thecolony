@@ -24,10 +24,14 @@ const EnvSchema = z.object({
 
   AI_GATEWAY_API_KEY: z.string().optional().default(''),
   OPENAI_API_KEY: z.string().optional().default(''),
+  GEMINI_API_KEY: z.string().optional().default(''),
+  GOOGLE_GENERATIVE_AI_API_KEY: z.string().optional().default(''),
 
   LLM_MODEL_DEFAULT: z.string().default('openai/gpt-4o-mini'),
   LLM_MODEL_ESCALATION: z.string().default('openai/gpt-4o'),
+  LLM_MODEL_GEMINI: z.string().default('google/gemini-2.5-flash'),
   LLM_EMBEDDING_MODEL: z.string().default('openai/text-embedding-3-small'),
+  LLM_PROVIDER_ORDER: z.string().default('openai,google'),
 
   WORLD_SPEED: z.coerce.number().default(1),
   WORLD_TICK_MS: z.coerce.number().default(1000),
@@ -59,5 +63,5 @@ export function env(): Env {
 
 export function hasLLMKey(): boolean {
   const e = env();
-  return Boolean(e.AI_GATEWAY_API_KEY || e.OPENAI_API_KEY);
+  return Boolean(e.AI_GATEWAY_API_KEY || e.OPENAI_API_KEY || e.GEMINI_API_KEY || e.GOOGLE_GENERATIVE_AI_API_KEY);
 }
