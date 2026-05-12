@@ -2,6 +2,7 @@ import { generateText } from 'ai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { env, hasLLMKey } from '@thecolony/config';
+import { recordLLMUsage } from './budget';
 import { canCallLLM, recordCall } from './rate-limit';
 
 export async function synthesizeEulogy({
@@ -23,17 +24,24 @@ export async function synthesizeEulogy({
   try {
     recordCall();
     const e = env();
+    const prompt = [
+      `Write a 4-6 sentence obituary for a citizen in an AI-run city simulation.`,
+      `Plain, specific, slightly literary, no markdown.`,
+      `Name: ${name}. Occupation: ${occupation ?? 'unassigned'}. Cause of death: ${cause}.`,
+      `Memories: ${memories.slice(0, 5).join(' | ') || 'none recorded'}.`,
+      `Recent events: ${events.slice(0, 8).join(', ') || 'none recorded'}.`,
+    ].join('\n');
     const { text } = await generateText({
       model: eulogyModel(e),
       temperature: 0.75,
       maxRetries: 1,
-      prompt: [
-        `Write a 4-6 sentence obituary for a citizen in an AI-run city simulation.`,
-        `Plain, specific, slightly literary, no markdown.`,
-        `Name: ${name}. Occupation: ${occupation ?? 'unassigned'}. Cause of death: ${cause}.`,
-        `Memories: ${memories.slice(0, 5).join(' | ') || 'none recorded'}.`,
-        `Recent events: ${events.slice(0, 8).join(', ') || 'none recorded'}.`,
-      ].join('\n'),
+      prompt,
+    });
+    recordLLMUsage({
+      model: e.LLM_MODEL_ESCALATION,
+      kind: 'eulogy',
+      estimatedInputTokens: estimateTokens(prompt),
+      estimatedOutputTokens: estimateTokens(text),
     });
     const cleaned = text.replace(/\s+/g, ' ').trim();
     return cleaned.length >= 80 ? cleaned.slice(0, 1200) : fallback;
@@ -41,6 +49,10 @@ export async function synthesizeEulogy({
     console.warn('[llm] eulogy fell back to deterministic text:', (e as Error).message.slice(0, 160));
     return fallback;
   }
+}
+
+function estimateTokens(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 4));
 }
 
 function eulogyModel(e = env()) {

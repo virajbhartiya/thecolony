@@ -69,6 +69,8 @@ echo "GEMINI_API_KEY=..." >> .env
 
 The `decide()` function automatically routes through the first configured provider in `LLM_PROVIDER_ORDER`. Defaults keep `openai/gpt-4o-mini` primary and use `google/gemini-2.5-flash` when Gemini is the available provider. No code changes needed.
 
+`LLM_HOURLY_USD_CAP` keeps a per-process hourly spend estimate. At 70% the worker enters thrift mode for routine decisions; at 100% live LLM calls are blocked and the city falls back to deterministic heuristics. Set `LLM_BUDGET_WEBHOOK_URL` to a Slack-compatible or generic webhook URL to receive soft and hard budget alerts.
+
 ## License
 
 UNLICENSED.

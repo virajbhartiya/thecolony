@@ -2,6 +2,7 @@ import { env, hasLLMKey } from '@thecolony/config';
 import { ActionSchema, type Action, type Agent } from '@thecolony/domain';
 import { heuristicDecide, type HeuristicContext } from './heuristic';
 import { canCallLLM, recordCall } from './rate-limit';
+import { shouldUseLLMForDecision } from './budget';
 
 export interface DecisionInput {
   agent: Agent;
@@ -19,6 +20,9 @@ export interface DecisionOutput {
 
 export async function decide(input: DecisionInput): Promise<DecisionOutput> {
   if (!hasLLMKey()) {
+    return { action: heuristicDecide(input.agent, input.context), source: 'heuristic' };
+  }
+  if (!shouldUseLLMForDecision(input.agent.id, input.importance ?? 3)) {
     return { action: heuristicDecide(input.agent, input.context), source: 'heuristic' };
   }
   if (!canCallLLM()) {

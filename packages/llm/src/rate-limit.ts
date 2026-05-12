@@ -2,10 +2,12 @@
 // Keeps a list of recent call timestamps; refuses if we'd exceed limit per minute.
 
 import { env } from '@thecolony/config';
+import { currentBudgetMode } from './budget';
 
 const calls: number[] = [];
 
 export function canCallLLM(): boolean {
+  if (currentBudgetMode() === 'panic') return false;
   const limit = env().LLM_MAX_RPM;
   if (limit <= 0) return false;
   const now = Date.now();

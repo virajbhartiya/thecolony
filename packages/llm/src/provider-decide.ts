@@ -6,6 +6,7 @@ import { ActionSchema } from '@thecolony/domain';
 import { z } from 'zod';
 import type { DecisionInput, DecisionOutput } from './decide';
 import { buildDecisionPrompt } from './prompt';
+import { recordLLMUsage } from './budget';
 
 const DecisionResponseSchema = z.object({
   action: ActionSchema,
@@ -34,6 +35,15 @@ export async function providerDecide(input: DecisionInput): Promise<DecisionOutp
     temperature: 0.9,
     maxRetries: 1,
   });
+  const usage = usageFromResult(result);
+  recordLLMUsage({
+    model: selected.id,
+    kind: 'decision',
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    estimatedInputTokens: estimateTokens(prompt),
+    estimatedOutputTokens: estimateTokens(JSON.stringify(result.object)),
+  });
 
   return {
     action: result.object.action,
@@ -42,6 +52,18 @@ export async function providerDecide(input: DecisionInput): Promise<DecisionOutp
     rationale: result.object.rationale,
     inner_monologue: result.object.inner_monologue,
   };
+}
+
+function usageFromResult(result: unknown): { inputTokens?: number; outputTokens?: number } {
+  const usage = (result as { usage?: { promptTokens?: number; completionTokens?: number } }).usage;
+  return {
+    inputTokens: usage?.promptTokens,
+    outputTokens: usage?.completionTokens,
+  };
+}
+
+function estimateTokens(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 4));
 }
 
 export function chooseDecisionModel(importance: number, e: Env = env()): ModelRef | null {

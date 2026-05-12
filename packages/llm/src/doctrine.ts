@@ -3,6 +3,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createOpenAI } from '@ai-sdk/openai';
 import { env, hasLLMKey } from '@thecolony/config';
 import type { Agent } from '@thecolony/domain';
+import { recordLLMUsage } from './budget';
 import { canCallLLM, recordCall } from './rate-limit';
 
 export async function synthesizeDoctrine({
@@ -20,17 +21,24 @@ export async function synthesizeDoctrine({
   try {
     recordCall();
     const e = env();
+    const prompt = [
+      `Write a faction doctrine for a persistent AI city simulation.`,
+      `Return only one compact manifesto paragraph, 35-70 words. No markdown.`,
+      `Founder: ${agent.name}, ${agent.occupation ?? 'unemployed'}.`,
+      `Traits: ambition=${agent.traits.ambition.toFixed(2)}, empathy=${agent.traits.empathy.toFixed(2)}, greed=${agent.traits.greed.toFixed(2)}, paranoia=${agent.traits.paranoia.toFixed(2)}, ideology=${agent.traits.ideology_lean.toFixed(2)}.`,
+      `Faction: ${name}, kind=${kind}.`,
+    ].join('\n');
     const { text } = await generateText({
       model: doctrineModel(e),
       temperature: 0.85,
       maxRetries: 1,
-      prompt: [
-        `Write a faction doctrine for a persistent AI city simulation.`,
-        `Return only one compact manifesto paragraph, 35-70 words. No markdown.`,
-        `Founder: ${agent.name}, ${agent.occupation ?? 'unemployed'}.`,
-        `Traits: ambition=${agent.traits.ambition.toFixed(2)}, empathy=${agent.traits.empathy.toFixed(2)}, greed=${agent.traits.greed.toFixed(2)}, paranoia=${agent.traits.paranoia.toFixed(2)}, ideology=${agent.traits.ideology_lean.toFixed(2)}.`,
-        `Faction: ${name}, kind=${kind}.`,
-      ].join('\n'),
+      prompt,
+    });
+    recordLLMUsage({
+      model: e.LLM_MODEL_ESCALATION,
+      kind: 'doctrine',
+      estimatedInputTokens: estimateTokens(prompt),
+      estimatedOutputTokens: estimateTokens(text),
     });
     const cleaned = text.replace(/\s+/g, ' ').trim();
     return cleaned.length >= 20 ? cleaned.slice(0, 800) : fallback;
@@ -38,6 +46,10 @@ export async function synthesizeDoctrine({
     console.warn('[llm] doctrine fell back to deterministic text:', (e as Error).message.slice(0, 160));
     return fallback;
   }
+}
+
+function estimateTokens(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 4));
 }
 
 function doctrineModel(e = env()) {

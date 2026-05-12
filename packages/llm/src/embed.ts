@@ -1,7 +1,9 @@
 import { hasLLMKey, env } from '@thecolony/config';
+import { currentBudgetMode, recordLLMUsage } from './budget';
 
 export async function embed(text: string): Promise<number[]> {
   if (!hasLLMKey()) return cheapHashEmbedding(text);
+  if (currentBudgetMode() === 'panic') return cheapHashEmbedding(text);
   try {
     const { createOpenAI } = await import('@ai-sdk/openai');
     const { embed: aiEmbed } = await import('ai');
@@ -11,6 +13,12 @@ export async function embed(text: string): Promise<number[]> {
     });
     const model = env().LLM_EMBEDDING_MODEL.replace(/^openai\//, '');
     const { embedding } = await aiEmbed({ model: openai.embedding(model), value: text });
+    recordLLMUsage({
+      model: env().LLM_EMBEDDING_MODEL,
+      kind: 'embedding',
+      estimatedInputTokens: Math.max(1, Math.ceil(text.length / 4)),
+      estimatedOutputTokens: 0,
+    });
     return embedding;
   } catch (e) {
     console.warn('[llm] embed fell back to hash:', (e as Error).message);
