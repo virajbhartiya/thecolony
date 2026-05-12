@@ -23,10 +23,10 @@ export default function BuildingDrawer() {
   if (!id || !building) return null;
 
   return (
-    <div className="pointer-events-auto absolute right-4 top-4 bottom-4 z-20 w-[320px] glass rounded-lg flex flex-col">
-      <header className="flex items-start gap-3 p-3 border-b border-white/5">
+    <div className="drawer-panel pointer-events-auto absolute bottom-3 left-3 right-3 top-28 z-20 flex flex-col overflow-hidden sm:left-4 sm:right-auto sm:top-24 sm:w-[340px] lg:bottom-4">
+      <header className="panel-header flex items-start gap-3 p-3">
         <div className="flex-1">
-          <p className="text-[10px] uppercase text-zinc-500">{building.kind}</p>
+          <p className="panel-tag">{building.kind}</p>
           <h2 className="text-base font-medium">{building.name}</h2>
           <p className="text-xs text-zinc-400">
             zone: {building.zone_kind} · {building.tile_w}×{building.tile_h} · capacity {building.capacity}
@@ -35,7 +35,7 @@ export default function BuildingDrawer() {
         </div>
         <button
           onClick={() => select(null)}
-          className="text-zinc-400 hover:text-zinc-100 transition-colors px-2 py-1 text-sm"
+          className="border border-[var(--line)] bg-[var(--ink-2)] px-2 py-1 text-sm text-[var(--cream-dim)] transition-colors hover:bg-[var(--ink-3)] hover:text-[var(--amber-2)]"
         >
           ✕
         </button>
@@ -43,7 +43,7 @@ export default function BuildingDrawer() {
       <div className="flex-1 overflow-y-auto p-3 text-sm">
         <Link
           href={`/building/${building.id}`}
-          className="mb-3 block rounded border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-center text-xs uppercase text-sky-200 hover:bg-sky-500/15"
+          className="mb-3 block border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-center text-xs uppercase text-sky-200 hover:bg-sky-500/15"
         >
           Full dossier
         </Link>

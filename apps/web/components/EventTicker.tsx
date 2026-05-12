@@ -75,12 +75,12 @@ export default function EventTicker() {
   const visible = events.filter((e) => KIND_LABEL[e.kind]?.label && e.importance >= 1).slice(0, 60);
 
   return (
-    <div className="pointer-events-auto absolute right-4 top-4 bottom-4 w-[340px] glass-strong rounded-lg flex flex-col shadow-2xl">
-      <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-        <span className="text-xs uppercase text-zinc-300">city record</span>
-        <span className="text-[10px] text-zinc-500">{visible.length}</span>
+    <div className="panel pointer-events-auto absolute bottom-4 right-4 top-4 hidden w-[340px] flex-col lg:flex">
+      <div className="panel-header px-4 py-3">
+        <span className="panel-title">city record</span>
+        <span className="panel-tag">{visible.length} events</span>
       </div>
-      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5">
+      <div className="flex-1 overflow-y-auto">
         {visible.length === 0 && (
           <div className="text-xs text-zinc-500 px-2 py-4">
             No events yet. The city is waking up.
@@ -96,17 +96,17 @@ export default function EventTicker() {
             <button
               key={e.id}
               onClick={() => actor && select(actor.id)}
-              className="w-full text-left rounded-md border border-white/[0.045] bg-black/15 px-2 py-2 hover:bg-white/[0.055] transition-colors"
+              className="w-full border-b border-dashed border-[var(--line-soft)] px-3 py-2 text-left transition-colors hover:bg-[var(--ink-3)]"
             >
               <span className="flex items-start gap-2">
                 <span
-                  className={`text-[10px] uppercase rounded border px-1.5 py-0.5 shrink-0 ${meta.tone}`}
+                  className={`shrink-0 border px-1.5 py-0.5 text-[10px] uppercase ${meta.tone}`}
                 >
                   {meta.label}
                 </span>
-                <span className="text-xs leading-snug text-zinc-200 min-w-0">
-                  <span className="font-medium">{actorName}</span>
-                  {detail && <span className="text-zinc-400"> - {detail}</span>}
+                <span className="min-w-0 text-xs leading-snug text-[var(--cream-dim)]">
+                  <span className="font-medium text-[var(--cream)]">{actorName}</span>
+                  {detail && <span className="text-[var(--mute)]"> - {detail}</span>}
                 </span>
               </span>
             </button>

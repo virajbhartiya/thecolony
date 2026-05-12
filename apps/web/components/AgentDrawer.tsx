@@ -80,8 +80,8 @@ export default function AgentDrawer() {
   if (!id) return null;
 
   return (
-    <div className="pointer-events-auto absolute right-4 top-4 bottom-4 z-20 w-[390px] glass-strong rounded-lg flex flex-col shadow-2xl">
-      <header className="flex items-start gap-3 p-4 border-b border-white/10">
+    <div className="drawer-panel pointer-events-auto absolute bottom-3 left-3 right-3 top-28 z-20 flex flex-col overflow-hidden sm:left-4 sm:right-auto sm:top-24 sm:w-[390px] lg:bottom-4">
+      <header className="panel-header flex items-start gap-3 p-4">
         {detail ? (
           <Portrait seed={detail.agent.portrait_seed} size={56} />
         ) : (
@@ -105,7 +105,7 @@ export default function AgentDrawer() {
         </div>
         <button
           onClick={() => select(null)}
-          className="text-zinc-400 hover:text-zinc-100 transition-colors px-2 py-1 text-sm"
+          className="border border-[var(--line)] bg-[var(--ink-2)] px-2 py-1 text-sm text-[var(--cream-dim)] transition-colors hover:bg-[var(--ink-3)] hover:text-[var(--amber-2)]"
           aria-label="Close"
         >
           ✕
@@ -115,7 +115,7 @@ export default function AgentDrawer() {
         <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
           <button
             onClick={() => follow(id)}
-            className={`w-full rounded px-3 py-1.5 text-xs uppercase border ${
+            className={`w-full border px-3 py-1.5 text-xs uppercase ${
               isFollow
                 ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
                 : 'border-white/10 hover:bg-white/5'
@@ -125,7 +125,7 @@ export default function AgentDrawer() {
           </button>
           <Link
             href={`/agent/${id}`}
-            className="block w-full rounded border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-center text-xs uppercase text-sky-200 hover:bg-sky-500/15"
+            className="block w-full border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-center text-xs uppercase text-sky-200 hover:bg-sky-500/15"
           >
             Full dossier
           </Link>
@@ -280,7 +280,7 @@ export default function AgentDrawer() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5 min-w-0">
+    <div className="min-w-0 border border-[var(--line-soft)] bg-[var(--ink-2)] px-2 py-1.5">
       <div className="text-[10px] uppercase text-zinc-500">{label}</div>
       <div className="truncate text-xs text-zinc-100">{value}</div>
     </div>
