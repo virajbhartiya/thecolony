@@ -25,6 +25,9 @@ pnpm-debug.log*
 .idea
 .DS_Store
 
+# claude-code internals
+.claude/
+
 # data
 data/
 postgres-data/
