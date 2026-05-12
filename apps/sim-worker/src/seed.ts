@@ -326,7 +326,7 @@ function takeBestFounder(
   industry: string | null,
 ) {
   const candidate = agents.find((a) => !a.assigned && industry && a.profile.industries.includes(industry));
-  return candidate ?? null;
+  return candidate ?? agents.find((a) => !a.assigned) ?? null;
 }
 
 function rankedCompaniesFor(
