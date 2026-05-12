@@ -264,7 +264,7 @@ Goal: shareable. Every screen pulls its weight.
 ## M10 — Hardening & launch
 
 - [ ] **M10-T01** Cost guard live with paging (Slack/email webhook). Soft 70% / hard 100%.
-- [ ] **M10-T02** Determinism replay: given an `agent_decision_log` row, replay produces the same action under the same seed.
+- [x] **M10-T02** Determinism replay: given an `agent_decision_log` row, replay produces the same action under the same seed.
 - [x] **M10-T03** Daily-report job: nightly markdown summary posted to `/news` and a static archive.
 - [x] **M10-T04** Public read API rate limiting (per-IP token bucket) at the api layer.
 - [ ] **M10-T05** Frontend perf pass: tree-shake, dynamic-import Pixi, lazy-load drawers, lighthouse perf ≥ 80 desktop.
@@ -289,6 +289,7 @@ Goal: shareable. Every screen pulls its weight.
 - [M8-T04] belief cadence — implemented as a 90-tick worker cadence for the demo-speed world instead of a weekly BullMQ job; it still writes durable belief memories and shifts `traits.ideology_lean`.
 - [M9-T01] lifecycle cadence — old-age, suicide, and bankruptcy checks run on the existing needs heartbeat in local demo mode so consequences are visible during product testing.
 - [M9-T02] conception cadence — conception is attempted during the accelerated 60-tick daily cycle; conceived children become active age-18 citizens immediately to make generational arcs inspectable in the running city.
+- [M10-T02] replay scope — heuristic decisions are recomputed exactly from the logged context snapshot and RNG seed; LLM rows verify the prompt hash and replay the stored model output because current providers do not expose stable seed semantics.
 - [M10-T03] daily report cadence — the worker checks during the accelerated daily heartbeat but writes one idempotent report per real date; seeding also writes a founding edition so `/news` and the static archive are not empty after a fresh seed.
 
 ---
@@ -301,4 +302,5 @@ Goal: shareable. Every screen pulls its weight.
 - [M8-T04] Belief updates run on the sim-worker heartbeat every 90 ticks in local demo mode instead of weekly, so factions and voting drift are visible during a short demo.
 - [M9-T01] Lifecycle checks share the needs heartbeat in local demo mode instead of a separate BullMQ death sweep, while death events remain durable and cause-specific.
 - [M9-T02] Conception uses the accelerated daily worker cadence and starts descendants at age 18 so the product can show inherited traits and family continuity without waiting real weeks.
+- [M10-T02] Decision replay stores agent/context snapshots, full prompt hash, model/source, action output, and RNG seed. Heuristic decisions are recomputed from the seed; LLM decisions replay from the stored output while validating the exact prompt hash.
 - [M10-T03] The local worker attempts report generation on the demo daily cadence, but report keys are per real date and idempotent to avoid flooding the public archive while preserving a durable daily edition.

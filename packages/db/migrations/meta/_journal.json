@@ -29,6 +29,13 @@
       "when": 1778566800000,
       "tag": "0003_justice",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778570400000,
+      "tag": "0004_agent_decision_log",
+      "breakpoints": true
     }
   ]
 }

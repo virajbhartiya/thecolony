@@ -9,6 +9,8 @@
     "start": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "seed": "tsx src/seed.ts",
+    "replay": "tsx src/replay-decision.ts",
+    "test": "tsx --test src/*.test.ts",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist .turbo"
   },

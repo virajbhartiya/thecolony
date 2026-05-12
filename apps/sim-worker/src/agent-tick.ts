@@ -10,6 +10,7 @@ import { roleForIndustry, wageForRole } from './workforce';
 import { accuseAgent, createIncident } from './justice';
 import { foundGroup, joinGroup, leaveGroup, loadGroupContext } from './groups';
 import { markAgentDead } from './lifecycle';
+import { recordAgentDecisionLog } from './decision-log';
 
 const TICK_INTERVAL_MS = 60 * 1000; // 60s real seconds between decisions
 
@@ -69,8 +70,17 @@ export async function tickDueAgents(now: Date, maxAgents = 6): Promise<number> {
 
 async function tickOne(agentRow: Agent): Promise<void> {
   const buildings = await db.select().from(schema.building);
-  const ctx = await buildContext(agentRow, buildings as unknown as BuildingRow[]);
+  const decisionTime = new Date();
+  const rngSeed = hashStringSeed(`${agentRow.id}:${decisionTime.toISOString()}`);
+  const ctx = await buildContext(agentRow, buildings as unknown as BuildingRow[], rngSeed);
   const decision = await decide({ agent: agentRow, context: ctx });
+  await recordAgentDecisionLog({
+    agent: agentRow,
+    context: ctx,
+    decision,
+    rngSeed,
+    t: decisionTime,
+  });
   await applyAction(agentRow, decision.action, buildings as unknown as BuildingRow[]);
 
   // schedule next decision
@@ -84,7 +94,7 @@ async function tickOne(agentRow: Agent): Promise<void> {
     .where(eq(schema.agent.id, agentRow.id));
 }
 
-async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
+async function buildContext(agent: Agent, allBuildings: BuildingRow[], rngSeed: number) {
   // nearest buildings
   const buildings = allBuildings
     .map((b) => ({ b, d: Math.hypot(b.tile_x - agent.pos_x, b.tile_y - agent.pos_y) }))
@@ -301,7 +311,7 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     job_wage_cents: job ? Number(job.wage_cents) : null,
     has_home: !!agent.home_id,
     food_qty: Number(foodInv[0]?.qty ?? 0),
-    rng: mulberry32(hashStringSeed(agent.id + Date.now().toString())),
+    rng: mulberry32(rngSeed),
     nearby_rich_agent_id: nearbyRich,
     at_shop_id: shopHere?.id ?? null,
     owned_company_id: ownedCompany[0]?.id ?? null,

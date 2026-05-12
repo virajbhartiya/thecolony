@@ -105,6 +105,30 @@ export const agent_memory = pgTable(
   }),
 );
 
+export const agent_decision_log = pgTable(
+  'agent_decision_log',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    t: timestamp('t', { withTimezone: true }).notNull().defaultNow(),
+    agent_id: uuid('agent_id').notNull(),
+    source: text('source').notNull(),
+    model: text('model'),
+    prompt_hash: text('prompt_hash').notNull(),
+    rng_seed: bigint('rng_seed', { mode: 'number' }).notNull(),
+    agent_snapshot: jsonb('agent_snapshot').notNull(),
+    context_snapshot: jsonb('context_snapshot').notNull(),
+    action: jsonb('action').notNull(),
+    action_kind: text('action_kind').notNull(),
+    rationale: text('rationale'),
+    inner_monologue: text('inner_monologue'),
+  },
+  (t) => ({
+    agent_t_idx: index('decision_log_agent_t_idx').on(t.agent_id, t.t),
+    prompt_hash_idx: index('decision_log_prompt_hash_idx').on(t.prompt_hash),
+    action_kind_idx: index('decision_log_action_kind_idx').on(t.action_kind),
+  }),
+);
+
 export const agent_relationship = pgTable(
   'agent_relationship',
   {
