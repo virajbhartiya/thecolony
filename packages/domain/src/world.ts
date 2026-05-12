@@ -45,6 +45,15 @@ export const WorldSnapshotSchema = z.object({
   speed: z.number(),
   population: z.number().int(),
   gdp_cents: z.number().int(),
+  government: z.object({
+    mayor_id: z.string().uuid().nullable(),
+    mayor_name: z.string().nullable(),
+    treasury_cents: z.number().int(),
+    tax_rate_bps: z.number().int(),
+    election_id: z.string().nullable(),
+    next_election_at: z.string().nullable(),
+    turnout: z.number().int().nullable(),
+  }),
   width: z.number().int(),
   height: z.number().int(),
   buildings: z.array(BuildingSchema),
@@ -58,6 +67,8 @@ export const WorldSnapshotSchema = z.object({
       target_y: z.number(),
       state: z.string(),
       status: z.string(),
+      occupation: z.string().nullable(),
+      balance_cents: z.number().int(),
       portrait_seed: z.string(),
     }),
   ),
@@ -68,3 +79,4 @@ export const MAP_WIDTH = 96;
 export const MAP_HEIGHT = 96;
 export const TILE_W_PX = 64;
 export const TILE_H_PX = 32;
+export const CITY_TREASURY_ID = '00000000-0000-0000-0000-000000000001';

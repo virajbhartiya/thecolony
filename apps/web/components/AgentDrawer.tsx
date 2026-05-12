@@ -19,6 +19,10 @@ interface AgentDetail {
     pos_x: number;
     pos_y: number;
   };
+  employer: { id: string; name: string; industry: string | null; treasury_cents: number } | null;
+  home: { id: string; name: string; kind: string; rent_cents: number } | null;
+  inventory: Array<{ key: string; qty: number }>;
+  votes: Array<{ election_id: string; candidate_id: string; reason: string; t: string }>;
   recentEvents: Array<{ id: number; t: string; kind: string; payload: Record<string, unknown> }>;
   memories: Array<{ id: number; t: string; kind: string; summary: string; salience: number }>;
   relationships: Array<{ subj_id: string; obj_id: string; affinity: number; trust: number; tags: string[] | null }>;
@@ -45,8 +49,8 @@ export default function AgentDrawer() {
   if (!id) return null;
 
   return (
-    <div className="pointer-events-auto absolute right-4 top-4 bottom-4 z-20 w-[360px] glass rounded-lg flex flex-col">
-      <header className="flex items-start gap-3 p-3 border-b border-white/5">
+    <div className="pointer-events-auto absolute right-4 top-4 bottom-4 z-20 w-[390px] glass-strong rounded-lg flex flex-col shadow-2xl">
+      <header className="flex items-start gap-3 p-4 border-b border-white/10">
         {detail ? (
           <Portrait seed={detail.agent.portrait_seed} size={56} />
         ) : (
@@ -73,7 +77,7 @@ export default function AgentDrawer() {
         </button>
       </header>
       {detail && (
-        <div className="flex-1 overflow-y-auto p-3 space-y-4 text-sm">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
           <button
             onClick={() => follow(id)}
             className={`w-full rounded px-3 py-1.5 text-xs uppercase tracking-widest border ${
@@ -84,6 +88,13 @@ export default function AgentDrawer() {
           >
             {isFollow ? 'Following · click to release' : 'Follow camera'}
           </button>
+
+          <section className="grid grid-cols-2 gap-2">
+            <Metric label="cash" value={`$${(detail.agent.balance_cents / 100).toFixed(0)}`} />
+            <Metric label="status" value={detail.agent.status} />
+            <Metric label="employer" value={detail.employer?.name ?? 'none'} />
+            <Metric label="home" value={detail.home?.name ?? 'homeless'} />
+          </section>
 
           <section>
             <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Needs</h3>
@@ -97,17 +108,52 @@ export default function AgentDrawer() {
 
           <section>
             <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Traits</h3>
-            <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] text-zinc-300 font-mono">
+            <div className="grid grid-cols-2 gap-1.5 text-[11px] text-zinc-300 font-mono">
               {Object.entries(detail.agent.traits)
                 .filter(([k]) => ['greed', 'risk', 'empathy', 'ambition', 'sociability', 'paranoia'].includes(k))
                 .map(([k, v]) => (
-                  <div key={k} className="flex justify-between">
+                  <div key={k} className="flex justify-between rounded border border-white/5 bg-black/20 px-2 py-1">
                     <span className="text-zinc-500">{k}</span>
                     <span>{Number(v).toFixed(2)}</span>
                   </div>
                 ))}
             </div>
           </section>
+
+          <section>
+            <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Career and inventory</h3>
+            <div className="rounded border border-white/10 bg-black/20 p-2 text-xs text-zinc-300 space-y-1.5">
+              <div className="flex justify-between gap-3">
+                <span className="text-zinc-500">role</span>
+                <span className="text-right">{detail.agent.occupation ?? 'unassigned'}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-zinc-500">workplace</span>
+                <span className="text-right">{detail.employer?.industry ?? 'none'}</span>
+              </div>
+              <div className="flex flex-wrap gap-1 pt-1">
+                {detail.inventory.map((item) => (
+                  <span key={item.key} className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5">
+                    {item.key} {item.qty}
+                  </span>
+                ))}
+                {detail.inventory.length === 0 && <span className="text-zinc-500">no inventory</span>}
+              </div>
+            </div>
+          </section>
+
+          {detail.votes.length > 0 && (
+            <section>
+              <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Civic record</h3>
+              <div className="space-y-1 text-xs">
+                {detail.votes.slice(0, 3).map((v) => (
+                  <div key={`${v.election_id}-${v.t}`} className="rounded border border-white/5 bg-black/20 px-2 py-1 text-zinc-300">
+                    voted on {v.reason}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section>
             <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Recent events</h3>
@@ -138,6 +184,15 @@ export default function AgentDrawer() {
         </div>
       )}
       {loading && !detail && <div className="p-4 text-sm text-zinc-500">Loading…</div>}
+    </div>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5 min-w-0">
+      <div className="text-[10px] uppercase tracking-widest text-zinc-500">{label}</div>
+      <div className="truncate text-xs text-zinc-100">{value}</div>
     </div>
   );
 }
@@ -175,6 +230,14 @@ function labelEvent(kind: string, payload: Record<string, unknown>): string {
       return `received wage $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
     case 'agent_paid_rent':
       return `paid rent $${(Number(payload.rent ?? 0) / 100).toFixed(0)}`;
+    case 'city_tax_collected':
+      return `paid city taxes`;
+    case 'city_aid_paid':
+      return `received public aid $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
+    case 'mayor_elected':
+      return `elected mayor`;
+    case 'vote_cast':
+      return `voted for ${String(payload.candidate ?? 'candidate')}`;
     case 'agent_evicted':
       return `evicted`;
     case 'agent_homed':

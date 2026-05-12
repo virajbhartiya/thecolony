@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { db, schema } from '@thecolony/db';
-import { eq, desc, sql, or } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 
 export async function registerAgentRoutes(app: FastifyInstance) {
   app.get<{ Params: { id: string } }>('/v1/agent/:id', async (req, reply) => {
@@ -35,7 +35,57 @@ export async function registerAgentRoutes(app: FastifyInstance) {
       .where(eq(schema.agent_relationship.subj_id, id))
       .limit(20);
 
-    return { agent, recentEvents, memories, relationships: rels };
+    const employer = agent.employer_id
+      ? (
+          await db
+            .select({
+              id: schema.company.id,
+              name: schema.company.name,
+              industry: schema.company.industry,
+              treasury_cents: schema.company.treasury_cents,
+            })
+            .from(schema.company)
+            .where(eq(schema.company.id, agent.employer_id))
+            .limit(1)
+        )[0] ?? null
+      : null;
+
+    const home = agent.home_id
+      ? (
+          await db
+            .select({
+              id: schema.building.id,
+              name: schema.building.name,
+              kind: schema.building.kind,
+              rent_cents: schema.building.rent_cents,
+            })
+            .from(schema.building)
+            .where(eq(schema.building.id, agent.home_id))
+            .limit(1)
+        )[0] ?? null
+      : null;
+
+    const inventory = await db.execute<{ key: string; qty: number }>(sql`
+      SELECT it.key, i.qty
+      FROM ${schema.inventory} i
+      JOIN ${schema.item_type} it ON it.id = i.item_id
+      WHERE i.owner_kind = 'agent' AND i.owner_id = ${id}
+      ORDER BY it.key ASC
+    `);
+
+    const votes = await db
+      .select({
+        election_id: schema.city_vote.election_id,
+        candidate_id: schema.city_vote.candidate_id,
+        reason: schema.city_vote.reason,
+        t: schema.city_vote.t,
+      })
+      .from(schema.city_vote)
+      .where(eq(schema.city_vote.voter_id, id))
+      .orderBy(desc(schema.city_vote.t))
+      .limit(5);
+
+    return { agent, employer, home, inventory, votes, recentEvents, memories, relationships: rels };
   });
 
   app.get('/v1/agents', async () => {

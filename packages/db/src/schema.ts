@@ -303,3 +303,26 @@ export const market_order = pgTable(
     status_idx: index('order_status_idx').on(t.status),
   }),
 );
+
+export const city_state = pgTable('city_state', {
+  key: text('key').primaryKey(),
+  value: jsonb('value').notNull(),
+  updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const city_vote = pgTable(
+  'city_vote',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    election_id: text('election_id').notNull(),
+    t: timestamp('t', { withTimezone: true }).notNull().defaultNow(),
+    voter_id: uuid('voter_id').notNull(),
+    candidate_id: uuid('candidate_id').notNull(),
+    weight: smallint('weight').notNull().default(1),
+    reason: text('reason').notNull(),
+  },
+  (t) => ({
+    election_idx: index('city_vote_election_idx').on(t.election_id),
+    voter_idx: index('city_vote_voter_idx').on(t.voter_id),
+  }),
+);

@@ -11,6 +11,8 @@ export interface AgentLive {
   target_y: number;
   state: string;
   status: string;
+  occupation: string | null;
+  balance_cents: number;
   portrait_seed: string;
   lastBubble?: { text: string; expires: number };
   lastFloater?: { text: string; color: string; expires: number };
@@ -34,6 +36,7 @@ export interface WorldState {
   events: LiveEvent[];
   population: number;
   gdp_cents: number;
+  government: WorldSnapshot['government'];
   simTime: string;
   connected: boolean;
   selectedAgentId: string | null;
@@ -41,6 +44,7 @@ export interface WorldState {
   followAgentId: string | null;
   setConnected: (b: boolean) => void;
   loadSnapshot: (s: WorldSnapshot) => void;
+  loadEvents: (events: LiveEvent[]) => void;
   applyEvent: (e: LiveEvent) => void;
   setAgentTarget: (id: string, tx: number, ty: number) => void;
   selectAgent: (id: string | null) => void;
@@ -56,6 +60,15 @@ export const useWorld = create<WorldState>((set, get) => ({
   events: [],
   population: 0,
   gdp_cents: 0,
+  government: {
+    mayor_id: null,
+    mayor_name: null,
+    treasury_cents: 0,
+    tax_rate_bps: 0,
+    election_id: null,
+    next_election_at: null,
+    turnout: null,
+  },
   simTime: new Date().toISOString(),
   connected: false,
   selectedAgentId: null,
@@ -72,9 +85,11 @@ export const useWorld = create<WorldState>((set, get) => ({
       agents: m,
       population: s.population,
       gdp_cents: s.gdp_cents,
+      government: s.government,
       simTime: s.sim_time,
     });
   },
+  loadEvents: (events) => set({ events: events.slice(0, 200) }),
   applyEvent: (e) => {
     const agents = new Map(get().agents);
     const now = Date.now();
@@ -108,6 +123,14 @@ export const useWorld = create<WorldState>((set, get) => ({
         floater(e.actor_ids[0]!, `-$${amt.toFixed(0)}`, '#f0883e');
         break;
       }
+      case 'city_aid_paid': {
+        const amt = Number(e.payload?.amount_cents ?? 0) / 100;
+        floater(e.actor_ids[0]!, `+$${amt.toFixed(0)} aid`, '#58a6ff');
+        break;
+      }
+      case 'city_tax_collected':
+        for (const id of e.actor_ids.slice(0, 5)) floater(id, 'tax', '#f0c84a');
+        break;
       case 'agent_evicted':
         floater(e.actor_ids[0]!, 'evicted', '#f85149');
         break;
@@ -151,6 +174,7 @@ export function mergeSnapshotAgents(s: WorldSnapshot) {
     agents,
     population: s.population,
     gdp_cents: s.gdp_cents,
+    government: s.government,
     simTime: s.sim_time,
   });
 }

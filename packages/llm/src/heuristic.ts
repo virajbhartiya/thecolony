@@ -25,6 +25,10 @@ export interface HeuristicContext {
   /** Optional richer signals — keep optional so existing callers don't break. */
   nearby_rich_agent_id?: string | null;
   at_shop_id?: string | null;
+  owned_company_id?: string | null;
+  hire_candidate_id?: string | null;
+  hire_role?: string | null;
+  founder_pressure?: number;
 }
 
 // Tiny RNG factory so the heuristic is deterministic per agent-tick if needed.
@@ -66,6 +70,25 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   const greed = agent.traits.greed;
   const empathy = agent.traits.empathy;
   const bal = agent.balance_cents;
+  const ambition = agent.traits.ambition;
+
+  if (ctx.owned_company_id && ctx.hire_candidate_id && rng() < ambition * 0.45) {
+    return {
+      kind: 'hire',
+      agent_id: ctx.hire_candidate_id,
+      wage_cents: 1800 + Math.floor(ambition * 900),
+      role: ctx.hire_role ?? 'worker',
+    };
+  }
+
+  if (!ctx.owned_company_id && !ctx.has_job && bal > 25000 && ambition > 0.68 && rng() < 0.08) {
+    return {
+      kind: 'found_company',
+      name: `${agent.name.split(' ')[0]} Works`,
+      charter: { industry: 'office', mission: 'turn skill and rumor into money' },
+      capital_cents: Math.min(15000, Math.floor(bal * 0.4)),
+    };
+  }
 
   // sleep urgent
   if (energy < 20) {

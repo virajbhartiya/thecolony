@@ -1,6 +1,6 @@
 import { db, schema } from '@thecolony/db';
 import { sql, eq } from 'drizzle-orm';
-import { genName, genTraits, genStarterNeeds, mulberry32 } from '@thecolony/sim';
+import { applyProfessionBias, genName, genTraits, genStarterNeeds, mulberry32, pickProfession } from '@thecolony/sim';
 import { writeEvent } from './event-writer';
 
 const POP_FLOOR = 25;
@@ -22,14 +22,16 @@ export async function spawnMigrantsIfNeeded(): Promise<void> {
     const home = homeCandidates[Math.floor(rng() * homeCandidates.length)];
     const pos = home ? { x: home.tile_x + 0.5, y: home.tile_y + 0.5 } : { x: 30, y: 30 };
     const ageYears = 18 + Math.floor(rng() * 50);
+    const profile = pickProfession(i + Math.floor(rng() * 100), rng);
     const [created] = await db
       .insert(schema.agent)
       .values({
         name: genName(rng),
         born_at: new Date(Date.now() - ageYears * 365 * 86400_000),
         age_years: ageYears,
-        traits: genTraits(rng),
+        traits: applyProfessionBias(genTraits(rng), profile),
         needs: genStarterNeeds(),
+        occupation: profile.title,
         balance_cents: 8000 + Math.floor(rng() * 4000),
         status: 'alive',
         portrait_seed: `m-${Date.now()}-${i}-${Math.floor(rng() * 1e9)}`,
@@ -52,11 +54,18 @@ export async function spawnMigrantsIfNeeded(): Promise<void> {
       parent_ids: [],
       kind: 'migrant',
     });
+    await db.insert(schema.agent_memory).values({
+      agent_id: created!.id,
+      kind: 'belief',
+      summary: `${created!.name} arrived as a ${profile.title.toLowerCase()} looking for ${profile.skill_tags.join(', ')} work.`,
+      salience: 0.8,
+      source_event_ids: [],
+    });
     await writeEvent({
       kind: 'migrant_arrived',
       actor_ids: [created!.id],
       importance: 6,
-      payload: { name: created!.name, age: ageYears },
+      payload: { name: created!.name, age: ageYears, occupation: profile.title },
     });
   }
 }

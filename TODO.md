@@ -46,21 +46,21 @@ Goal: empty rooms, lights on, plumbing connected. No simulation yet.
 
 - [x] **M0-T01** Initialize pnpm + Turborepo monorepo with the layout above. Add `tsconfig.base.json`, strict mode. Add `.editorconfig`, `.prettierrc`, ESLint flat config.
   - Verify: `pnpm install` clean. `pnpm typecheck` returns 0.
-- [x] **M0-T0- [ ] **M0-T02** Scaffold `apps/web` with `create-next-app@latest` (App Router, TS, Tailwind). Wire shadcn/ui (`npx shadcn@latest init`).
+- [x] **M0-T02** Scaffold `apps/web` with `create-next-app@latest` (App Router, TS, Tailwind). Wire shadcn/ui (`npx shadcn@latest init`).
   - Verify: `pnpm --filter web dev` renders default page locally.
-- [x] **M0-T0- [ ] **M0-T03** Scaffold `apps/api` (Fastify + TypeScript). Endpoint `GET /v1/health` returns `{ ok: true, t }`.
+- [x] **M0-T03** Scaffold `apps/api` (Fastify + TypeScript). Endpoint `GET /v1/health` returns `{ ok: true, t }`.
   - Verify: `pnpm --filter api dev` → `curl localhost:3001/v1/health` returns ok.
-- [x] **M0-T0- [ ] **M0-T04** Scaffold `apps/sim-worker` as a long-running Node process. For now: log "heartbeat" every second.
+- [x] **M0-T04** Scaffold `apps/sim-worker` as a long-running Node process. For now: log "heartbeat" every second.
   - Verify: process stays up; logs heartbeat.
-- [x] **M0-T0- [ ] **M0-T05** Add `packages/db` with Drizzle. Wire to a local Postgres 16 (via Docker Compose). Add pgvector extension migration.
+- [x] **M0-T05** Add `packages/db` with Drizzle. Wire to a local Postgres 16 (via Docker Compose). Add pgvector extension migration.
   - Verify: `pnpm --filter db migrate` runs on a fresh DB.
-- [x] **M0-T0- [ ] **M0-T06** Add `packages/domain` exporting TS types + zod schemas for the core entities in SPEC §4. Action schema (SPEC §5.5) lives here.
+- [x] **M0-T06** Add `packages/domain` exporting TS types + zod schemas for the core entities in SPEC §4. Action schema (SPEC §5.5) lives here.
   - Verify: `import { AgentSchema } from '@thecolony/domain'` works from sim-worker.
-- [x] **M0-T0- [ ] **M0-T07** Add `infra/docker-compose.yml` for `postgres` (with pgvector image), `redis`, plus stubbed `api` and `sim-worker` services that just run their dev images.
+- [x] **M0-T07** Add `infra/docker-compose.yml` for `postgres` (with pgvector image), `redis`, plus stubbed `api` and `sim-worker` services that just run their dev images.
   - Verify: `docker compose up -d postgres redis` healthy; `docker compose ps` shows them up.
-- [x] **M0-T0- [ ] **M0-T08** Add `infra/Caddyfile` for TLS on the EC2 box (placeholder domain). Configure to reverse-proxy `api.colony.tld` → api container and serve `/ws` upgrade.
+- [x] **M0-T08** Add `infra/Caddyfile` for TLS on the EC2 box (placeholder domain). Configure to reverse-proxy `api.colony.tld` → api container and serve `/ws` upgrade.
   - Verify: `caddy validate Caddyfile` passes.
-- [x] **M0-T0- [ ] **M0-T09** Wire a `.env.example` and a `.env` loader (`packages/config`). Document required vars: `DATABASE_URL`, `REDIS_URL`, `AI_GATEWAY_KEY`, `WORLD_SPEED`.
+- [x] **M0-T09** Wire a `.env.example` and a `.env` loader (`packages/config`). Document required vars: `DATABASE_URL`, `REDIS_URL`, `AI_GATEWAY_KEY`, `WORLD_SPEED`.
   - Verify: `pnpm --filter sim-worker dev` fails loudly if `DATABASE_URL` missing.
 - [ ] **M0-T10** GitHub Actions: lint + typecheck + unit tests on PR. Deploy `apps/web` to Vercel on push to main. Build + push Docker images for `api` and `sim-worker` to a registry.
   - Verify: dummy PR triggers all CI jobs green.

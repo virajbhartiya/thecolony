@@ -37,6 +37,8 @@ export async function registerWorldRoutes(app: FastifyInstance) {
         target_y: schema.agent.target_y,
         state: schema.agent.state,
         status: schema.agent.status,
+        occupation: schema.agent.occupation,
+        balance_cents: schema.agent.balance_cents,
         portrait_seed: schema.agent.portrait_seed,
       })
       .from(schema.agent)
@@ -46,6 +48,28 @@ export async function registerWorldRoutes(app: FastifyInstance) {
       sql`SELECT COALESCE(SUM(balance_cents)::bigint, 0)::bigint AS gdp FROM ${schema.agent} WHERE status <> 'dead'`,
     );
     const gdp_cents = Number(gdpRow[0]?.gdp ?? 0);
+    const governmentRows = await db
+      .select({ value: schema.city_state.value })
+      .from(schema.city_state)
+      .where(eq(schema.city_state.key, 'government'))
+      .limit(1);
+    const government = (governmentRows[0]?.value as {
+      mayor_id?: string | null;
+      mayor_name?: string | null;
+      treasury_cents?: number;
+      tax_rate_bps?: number;
+      election_id?: string | null;
+      next_election_at?: string | null;
+      turnout?: number | null;
+    } | undefined) ?? {
+      mayor_id: null,
+      mayor_name: null,
+      treasury_cents: 0,
+      tax_rate_bps: 0,
+      election_id: null,
+      next_election_at: null,
+      turnout: null,
+    };
 
     const data = {
       t: new Date().toISOString(),
@@ -53,6 +77,15 @@ export async function registerWorldRoutes(app: FastifyInstance) {
       speed: 1,
       population: agents.length,
       gdp_cents,
+      government: {
+        mayor_id: government.mayor_id ?? null,
+        mayor_name: government.mayor_name ?? null,
+        treasury_cents: Number(government.treasury_cents ?? 0),
+        tax_rate_bps: Number(government.tax_rate_bps ?? 0),
+        election_id: government.election_id ?? null,
+        next_election_at: government.next_election_at ?? null,
+        turnout: government.turnout ?? null,
+      },
       width: MAP_WIDTH,
       height: MAP_HEIGHT,
       buildings,

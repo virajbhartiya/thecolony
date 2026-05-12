@@ -6,6 +6,7 @@ import { stepMovement } from './movement';
 import { decayNeedsAll, sweepDeaths } from './needs';
 import { applyPayroll, collectRent, applyDailyProduction } from './economy';
 import { spawnMigrantsIfNeeded } from './migrants';
+import { applyCivicCycle, ensureGovernment } from './government';
 import { closePublisher } from './publisher';
 
 const TICK_MS = env().WORLD_TICK_MS;
@@ -17,6 +18,7 @@ const DAILY_EVERY_TICKS = 60;
 let stopping = false;
 
 async function main() {
+  await ensureGovernment();
   log.info(
     {
       llm: hasLLMKey() ? 'live (key detected)' : 'heuristic fallback (no key)',
@@ -41,10 +43,11 @@ async function main() {
         await sweepDeaths();
       }
       if (tickCount % DAILY_EVERY_TICKS === 0) {
-        log.info('daily: production + payroll + rent + migrants');
+        log.info('daily: production + payroll + rent + civic cycle + migrants');
         await applyDailyProduction();
         await applyPayroll();
         await collectRent();
+        await applyCivicCycle();
         await spawnMigrantsIfNeeded();
       }
     } catch (e) {

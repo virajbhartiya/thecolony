@@ -78,6 +78,37 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     .where(and(eq(schema.job.agent_id, agent.id), isNull(schema.job.ended_at)))
     .limit(1);
 
+  const ownedCompany = await db
+    .select({
+      id: schema.company.id,
+      industry: schema.company.industry,
+    })
+    .from(schema.company)
+    .where(eq(schema.company.founder_id, agent.id))
+    .limit(1);
+
+  let hireCandidateId: string | null = null;
+  let hireRole: string | null = null;
+  if (ownedCompany[0]) {
+    const workerCount = await db.execute<{ n: number }>(
+      sql`SELECT COUNT(*)::int AS n FROM ${schema.job} WHERE company_id=${ownedCompany[0].id} AND ended_at IS NULL`,
+    );
+    if (Number(workerCount[0]?.n ?? 0) < 5) {
+      const candidates = await db.execute<{ id: string; occupation: string | null }>(sql`
+        SELECT a.id, a.occupation
+        FROM ${schema.agent} a
+        LEFT JOIN ${schema.job} j ON j.agent_id = a.id AND j.ended_at IS NULL
+        WHERE a.status = 'alive'
+          AND a.id <> ${agent.id}
+          AND j.id IS NULL
+        ORDER BY ((a.pos_x - ${agent.pos_x})^2 + (a.pos_y - ${agent.pos_y})^2) ASC
+        LIMIT 1
+      `);
+      hireCandidateId = candidates[0]?.id ?? null;
+      hireRole = candidates[0]?.occupation?.toLowerCase() ?? 'worker';
+    }
+  }
+
   const foodInv = await db.execute<{ qty: number }>(
     sql`SELECT COALESCE(qty,0) AS qty FROM ${schema.inventory} WHERE owner_kind='agent' AND owner_id=${agent.id} AND item_id=1`,
   );
@@ -115,6 +146,9 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     rng: mulberry32(hashStringSeed(agent.id + Date.now().toString())),
     nearby_rich_agent_id: nearbyRich,
     at_shop_id: shopHere?.id ?? null,
+    owned_company_id: ownedCompany[0]?.id ?? null,
+    hire_candidate_id: hireCandidateId,
+    hire_role: hireRole,
   };
 }
 
@@ -185,32 +219,118 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
       return;
     }
     case 'seek_job': {
-      // find any company without a worker
-      const companies = await db.select().from(schema.company).limit(20);
+      const desired = (agent.occupation ?? '').toLowerCase();
+      const companies = await db
+        .select()
+        .from(schema.company)
+        .orderBy(sql`
+          CASE
+            WHEN lower(coalesce(${schema.company.industry}, '')) = ${desired} THEN 0
+            WHEN ${desired} LIKE '%' || lower(coalesce(${schema.company.industry}, '')) || '%' THEN 1
+            ELSE 2
+          END,
+          ${schema.company.treasury_cents} DESC
+        `)
+        .limit(30);
       for (const c of companies) {
         const workers = await db.execute<{ n: number }>(
           sql`SELECT COUNT(*)::int AS n FROM ${schema.job} WHERE company_id=${c.id} AND ended_at IS NULL`,
         );
-        if (Number(workers[0]?.n ?? 0) < 3) {
+        if (Number(workers[0]?.n ?? 0) < 5) {
           await db.insert(schema.job).values({
             agent_id: agent.id,
             company_id: c.id,
-            role: 'worker',
-            wage_cents: 1500,
+            role: agent.occupation?.toLowerCase() ?? 'worker',
+            wage_cents: wageForOccupation(agent.occupation),
           });
           await db
             .update(schema.agent)
-            .set({ employer_id: c.id, occupation: c.industry ?? 'worker' })
+            .set({ employer_id: c.id, occupation: agent.occupation ?? c.industry ?? 'worker' })
             .where(eq(schema.agent.id, agent.id));
           await writeEvent({
             kind: 'agent_hired',
             actor_ids: [agent.id, c.id],
             importance: 5,
-            payload: { role: 'worker', wage_cents: 1500, company: c.name },
+            payload: { role: agent.occupation ?? 'worker', wage_cents: wageForOccupation(agent.occupation), company: c.name },
           });
           return;
         }
       }
+      return;
+    }
+    case 'hire': {
+      const [owned] = await db.select().from(schema.company).where(eq(schema.company.founder_id, agent.id)).limit(1);
+      if (!owned) return;
+      const [target] = await db.select().from(schema.agent).where(eq(schema.agent.id, action.agent_id)).limit(1);
+      if (!target || target.status !== 'alive') return;
+      const existing = await db
+        .select()
+        .from(schema.job)
+        .where(and(eq(schema.job.agent_id, target.id), isNull(schema.job.ended_at)))
+        .limit(1);
+      if (existing.length) return;
+      await db.insert(schema.job).values({
+        agent_id: target.id,
+        company_id: owned.id,
+        role: action.role,
+        wage_cents: Math.max(1000, Math.min(6000, action.wage_cents)),
+      });
+      await db
+        .update(schema.agent)
+        .set({ employer_id: owned.id, occupation: target.occupation ?? action.role })
+        .where(eq(schema.agent.id, target.id));
+      await writeEvent({
+        kind: 'agent_hired',
+        actor_ids: [target.id, agent.id, owned.id],
+        importance: 6,
+        payload: {
+          role: action.role,
+          wage_cents: action.wage_cents,
+          company: owned.name,
+          hired_by: agent.name,
+        },
+      });
+      return;
+    }
+    case 'found_company': {
+      const capital = Math.max(1000, Math.min(action.capital_cents, Number(agent.balance_cents)));
+      if (capital < 1000) return;
+      await db
+        .update(schema.agent)
+        .set({ balance_cents: sql`${schema.agent.balance_cents} - ${capital}` })
+        .where(eq(schema.agent.id, agent.id));
+      const [company] = await db
+        .insert(schema.company)
+        .values({
+          name: action.name,
+          founder_id: agent.id,
+          charter: action.charter,
+          treasury_cents: capital,
+          industry: String(action.charter.industry ?? 'office'),
+        })
+        .returning({ id: schema.company.id, name: schema.company.name });
+      if (!company) return;
+      await db.insert(schema.job).values({
+        agent_id: agent.id,
+        company_id: company.id,
+        role: 'founder',
+        wage_cents: 0,
+      });
+      await db.update(schema.agent).set({ employer_id: company.id }).where(eq(schema.agent.id, agent.id));
+      await db.insert(schema.ledger_entry).values({
+        debit_kind: 'agent',
+        debit_id: agent.id,
+        credit_kind: 'company',
+        credit_id: company.id,
+        amount_cents: capital,
+        reason: 'company_capital',
+      });
+      await writeEvent({
+        kind: 'company_founded',
+        actor_ids: [agent.id, company.id],
+        importance: 8,
+        payload: { name: company.name, capital_cents: capital },
+      });
       return;
     }
     case 'rent': {
@@ -335,4 +455,16 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
       await db.update(schema.agent).set({ state: 'idle' }).where(eq(schema.agent.id, agent.id));
       return;
   }
+}
+
+function wageForOccupation(occupation: string | null | undefined): number {
+  const text = (occupation ?? '').toLowerCase();
+  if (text.includes('broker')) return 2800;
+  if (text.includes('engineer')) return 2400;
+  if (text.includes('builder')) return 2200;
+  if (text.includes('chef')) return 2000;
+  if (text.includes('guard')) return 2000;
+  if (text.includes('shopkeeper')) return 2100;
+  if (text.includes('civil')) return 2000;
+  return 1600;
 }

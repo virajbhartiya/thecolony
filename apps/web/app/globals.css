@@ -5,7 +5,9 @@
 html, body, #__next { height: 100%; margin: 0; }
 
 body {
-  background: #08090d;
+  background:
+    linear-gradient(135deg, rgba(12, 17, 23, 0.96), rgba(7, 9, 13, 1)),
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 1px, transparent 1px 64px);
   color: #e7e9ee;
   font-family: 'Inter', system-ui, sans-serif;
   overscroll-behavior: none;
@@ -14,9 +16,18 @@ body {
 * { box-sizing: border-box; }
 
 .glass {
-  background: rgba(12, 13, 18, 0.78);
+  background: rgba(12, 13, 18, 0.82);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255,255,255,0.06);
+}
+
+.glass-strong {
+  background:
+    linear-gradient(180deg, rgba(20, 24, 31, 0.92), rgba(9, 11, 16, 0.9)),
+    rgba(12, 13, 18, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 0 18px 60px rgba(0,0,0,0.42);
 }
 
 @keyframes pulse-dot {

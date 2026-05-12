@@ -7,6 +7,15 @@ export interface WorldSnapshot {
   speed: number;
   population: number;
   gdp_cents: number;
+  government: {
+    mayor_id: string | null;
+    mayor_name: string | null;
+    treasury_cents: number;
+    tax_rate_bps: number;
+    election_id: string | null;
+    next_election_at: string | null;
+    turnout: number | null;
+  };
   width: number;
   height: number;
   buildings: Array<{
@@ -31,6 +40,8 @@ export interface WorldSnapshot {
     target_y: number;
     state: string;
     status: string;
+    occupation: string | null;
+    balance_cents: number;
     portrait_seed: string;
   }>;
 }

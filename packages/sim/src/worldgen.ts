@@ -174,8 +174,8 @@ export function generateWorld(seed = 42): GeneratedWorld {
   place('power_plant', 56, 60, 3, 3, { name: 'Power Plant' });
 
   // farms (NE pre-park)
-  place('farm', 60, 14, 4, 3, { name: 'River Farm A' });
-  place('farm', 60, 22, 4, 3, { name: 'River Farm B' });
+  place('farm', 62, 14, 4, 3, { name: 'River Farm A' });
+  place('farm', 62, 22, 4, 3, { name: 'River Farm B' });
 
   // passability: roads, plazas, sand are passable. water and buildings are not.
   const passable: boolean[][] = Array.from({ length: height }, () =>

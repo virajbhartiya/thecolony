@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { fetchSnapshot } from '../lib/api';
+import { fetchEvents, fetchSnapshot } from '../lib/api';
 import { mergeSnapshotAgents, useWorld } from '../lib/store';
 import { useWorldStream } from '../lib/ws';
 import HUD from '../components/HUD';
@@ -11,6 +11,7 @@ import CityCanvas from '../components/CityCanvas';
 
 export default function Home() {
   const loadSnapshot = useWorld((s) => s.loadSnapshot);
+  const loadEvents = useWorld((s) => s.loadEvents);
   const [error, setError] = useState<string | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
 
@@ -25,6 +26,8 @@ export default function Home() {
         if (stopped) return;
         if (!bootstrapped) {
           loadSnapshot(snap);
+          const history = await fetchEvents().catch(() => ({ events: [] }));
+          if (!stopped) loadEvents(history.events ?? []);
           setBootstrapped(true);
         } else {
           mergeSnapshotAgents(snap);
@@ -41,7 +44,7 @@ export default function Home() {
       stopped = true;
       if (timer) clearTimeout(timer);
     };
-  }, [loadSnapshot, bootstrapped]);
+  }, [loadSnapshot, loadEvents, bootstrapped]);
 
   return (
     <main className="relative w-screen h-screen overflow-hidden">
