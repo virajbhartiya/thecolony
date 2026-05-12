@@ -18,6 +18,7 @@ interface Metrics {
   orders_24h: number;
   group_founded_24h: number;
   company_founded_24h: number;
+  companies_alive: number;
   warrants_outstanding: number;
   jailed_now: number;
   bankrupt_now: number;
@@ -135,7 +136,7 @@ export default function LeftSidebar() {
           <Pulse label="Evictions" value={String(m?.evictions_24h ?? 0)} accent="#f0a347" />
           <Pulse label="Trades" value={String(m?.trades_24h ?? 0)} accent="#4ec5b8" />
           <Pulse label="Orders" value={String(m?.orders_24h ?? 0)} accent="#4ec5b8" />
-          <Pulse label="Cos." value={String(m?.company_founded_24h ?? 0)} accent="#4ec5b8" />
+          <Pulse label="Cos." value={String(m?.companies_alive ?? 0)} accent="#4ec5b8" />
           <Pulse label="Groups" value={String(m?.group_founded_24h ?? 0)} accent="#9b7fd1" />
           <Pulse label="Theft$" value={fmtMoney(m?.thefts_24h_amount_cents)} accent="#e2536e" />
           <Pulse label="Jailed" value={String(m?.jailed_now ?? 0)} accent="#e2536e" />

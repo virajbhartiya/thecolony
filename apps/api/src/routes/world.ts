@@ -158,11 +158,17 @@ export async function registerWorldRoutes(app: FastifyInstance) {
           WHERE t > now() - interval '24 hours' AND kind = 'company_founded') AS company_founded_24h
     `);
 
-    const [outstanding] = await db.execute<{ warrants_outstanding: number; jailed_now: number; bankrupt_now: number }>(sql`
+    const [outstanding] = await db.execute<{
+      warrants_outstanding: number;
+      jailed_now: number;
+      bankrupt_now: number;
+      companies_alive: number;
+    }>(sql`
       SELECT
         (SELECT COALESCE(SUM(warrants)::int, 0)::int FROM ${schema.legal_status}) AS warrants_outstanding,
         (SELECT COUNT(*)::int FROM ${schema.agent} WHERE status = 'jailed') AS jailed_now,
-        (SELECT COUNT(*)::int FROM ${schema.agent} WHERE status = 'bankrupt') AS bankrupt_now
+        (SELECT COUNT(*)::int FROM ${schema.agent} WHERE status = 'bankrupt') AS bankrupt_now,
+        (SELECT COUNT(*)::int FROM ${schema.company} WHERE dissolved_at IS NULL) AS companies_alive
     `);
 
     const [satisfaction] = await db.execute<{ avg_life_satisfaction: number }>(sql`
