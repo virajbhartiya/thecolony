@@ -1,5 +1,6 @@
 'use client';
 import { useMemo } from 'react';
+import Link from 'next/link';
 import { useWorld } from '../lib/store';
 
 export default function BuildingDrawer() {
@@ -25,7 +26,7 @@ export default function BuildingDrawer() {
     <div className="pointer-events-auto absolute right-4 top-4 bottom-4 z-20 w-[320px] glass rounded-lg flex flex-col">
       <header className="flex items-start gap-3 p-3 border-b border-white/5">
         <div className="flex-1">
-          <p className="text-[10px] uppercase tracking-widest text-zinc-500">{building.kind}</p>
+          <p className="text-[10px] uppercase text-zinc-500">{building.kind}</p>
           <h2 className="text-base font-medium">{building.name}</h2>
           <p className="text-xs text-zinc-400">
             zone: {building.zone_kind} · {building.tile_w}×{building.tile_h} · capacity {building.capacity}
@@ -40,7 +41,13 @@ export default function BuildingDrawer() {
         </button>
       </header>
       <div className="flex-1 overflow-y-auto p-3 text-sm">
-        <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-2">Inside now</h3>
+        <Link
+          href={`/building/${building.id}`}
+          className="mb-3 block rounded border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-center text-xs uppercase text-sky-200 hover:bg-sky-500/15"
+        >
+          Full dossier
+        </Link>
+        <h3 className="text-[10px] uppercase text-zinc-500 mb-2">Inside now</h3>
         {occupants.length === 0 && <p className="text-zinc-500 text-xs">Empty.</p>}
         <div className="space-y-1">
           {occupants.map((a) => (

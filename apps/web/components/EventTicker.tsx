@@ -37,7 +37,7 @@ export default function EventTicker() {
   return (
     <div className="pointer-events-auto absolute right-4 top-4 bottom-4 w-[340px] glass-strong rounded-lg flex flex-col shadow-2xl">
       <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-        <span className="text-xs uppercase tracking-[0.2em] text-zinc-300">city record</span>
+        <span className="text-xs uppercase text-zinc-300">city record</span>
         <span className="text-[10px] text-zinc-500">{visible.length}</span>
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5">
@@ -56,7 +56,7 @@ export default function EventTicker() {
               className="w-full text-left rounded-md border border-white/[0.045] bg-black/15 px-2 py-2 hover:bg-white/[0.055] transition-colors"
             >
               <span className="flex items-start gap-2">
-                <span className={`text-[10px] uppercase tracking-wider rounded border px-1.5 py-0.5 shrink-0 ${meta.tone}`}>
+                <span className={`text-[10px] uppercase rounded border px-1.5 py-0.5 shrink-0 ${meta.tone}`}>
                   {meta.label}
                 </span>
                 <span className="text-xs leading-snug text-zinc-200 min-w-0">

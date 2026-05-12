@@ -1,4 +1,5 @@
 'use client';
+import Link from 'next/link';
 import { useWorld } from '../lib/store';
 
 export default function HUD() {
@@ -20,7 +21,7 @@ export default function HUD() {
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="live-dot" />
-                <span className="text-[10px] uppercase tracking-[0.22em] text-zinc-400">
+                <span className="text-[10px] uppercase text-zinc-400">
                   {connected ? 'live shared city' : 'reconnecting'}
                 </span>
               </div>
@@ -46,7 +47,7 @@ export default function HUD() {
               secondary={government.turnout ? `${government.turnout} voters last term` : 'founding term'}
             />
             <div className="rounded border border-white/10 bg-black/20 px-3 py-2">
-              <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">workforce</div>
+              <div className="text-[10px] uppercase text-zinc-500">workforce</div>
               <div className="mt-1 flex flex-wrap gap-1.5">
                 {professionMix.map((p) => (
                   <span key={p.name} className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[11px] text-zinc-200">
@@ -57,11 +58,18 @@ export default function HUD() {
               </div>
             </div>
           </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {HUD_LINKS.map(([href, label]) => (
+              <Link
+                key={href}
+                href={href}
+                className="rounded border border-white/10 bg-white/[0.035] px-2.5 py-1 text-[11px] text-zinc-300 hover:border-white/20 hover:bg-white/[0.07]"
+              >
+                {label}
+              </Link>
+            ))}
+          </div>
         </div>
-      </div>
-      <div className="absolute bottom-4 left-4 glass rounded-lg px-3 py-2 text-[11px] text-zinc-400 leading-relaxed shadow-lg">
-        <kbd className="text-zinc-200">WASD</kbd> pan · <kbd className="text-zinc-200">scroll</kbd> zoom ·
-        click an agent or building
       </div>
     </div>
   );
@@ -70,7 +78,7 @@ export default function HUD() {
 function InfoBlock({ label, primary, secondary }: { label: string; primary: string; secondary: string }) {
   return (
     <div className="rounded border border-white/10 bg-black/20 px-3 py-2 min-w-0">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">{label}</div>
+      <div className="text-[10px] uppercase text-zinc-500">{label}</div>
       <div className="mt-0.5 truncate text-sm font-medium text-zinc-100">{primary}</div>
       <div className="truncate text-[11px] text-zinc-400">{secondary}</div>
     </div>
@@ -89,11 +97,20 @@ function Stat({
   const color = tone === 'warn' ? 'text-amber-400' : tone === 'danger' ? 'text-rose-400' : 'text-zinc-100';
   return (
     <div className="rounded border border-white/10 bg-white/[0.035] px-3 py-2 min-w-[92px]">
-      <span className="text-[10px] uppercase tracking-widest text-zinc-500">{label}</span>
+      <span className="text-[10px] uppercase text-zinc-500">{label}</span>
       <span className={`block text-sm font-mono font-medium ${color}`}>{value}</span>
     </div>
   );
 }
+
+const HUD_LINKS = [
+  ['/feed', 'Feed'],
+  ['/news', 'News'],
+  ['/leaderboards', 'Leaders'],
+  ['/market', 'Market'],
+  ['/crime', 'Crime'],
+  ['/history', 'History'],
+] as const;
 
 function topProfessions(agents: Array<{ occupation: string | null }>): Array<{ name: string; count: number }> {
   const counts = new Map<string, number>();

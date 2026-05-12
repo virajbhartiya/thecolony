@@ -5,6 +5,7 @@ import { env } from '@thecolony/config';
 import { registerWorldRoutes } from './routes/world';
 import { registerAgentRoutes } from './routes/agent';
 import { registerEventRoutes } from './routes/events';
+import { registerCityRoutes } from './routes/city';
 import { registerWsRoutes } from './routes/ws';
 
 async function main() {
@@ -20,6 +21,7 @@ async function main() {
   await registerWorldRoutes(app);
   await registerAgentRoutes(app);
   await registerEventRoutes(app);
+  await registerCityRoutes(app);
   await registerWsRoutes(app);
 
   const e = env();

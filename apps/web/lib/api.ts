@@ -64,5 +64,11 @@ export async function fetchEvents() {
   return r.json();
 }
 
+export async function fetchEndpoint<T>(path: string): Promise<T> {
+  const r = await fetch(`${API_BASE}${path}`, { cache: 'no-store' });
+  if (!r.ok) throw new Error(`${path} failed: ${r.status}`);
+  return r.json() as Promise<T>;
+}
+
 export const WS_ENDPOINT = WS_URL;
 export const API_BASE_URL = API_BASE;

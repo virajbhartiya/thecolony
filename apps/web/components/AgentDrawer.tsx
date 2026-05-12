@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useWorld } from '../lib/store';
 import { fetchAgent } from '../lib/api';
 import Portrait from './Portrait';
@@ -80,7 +81,7 @@ export default function AgentDrawer() {
         <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
           <button
             onClick={() => follow(id)}
-            className={`w-full rounded px-3 py-1.5 text-xs uppercase tracking-widest border ${
+            className={`w-full rounded px-3 py-1.5 text-xs uppercase border ${
               isFollow
                 ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
                 : 'border-white/10 hover:bg-white/5'
@@ -88,6 +89,12 @@ export default function AgentDrawer() {
           >
             {isFollow ? 'Following · click to release' : 'Follow camera'}
           </button>
+          <Link
+            href={`/agent/${id}`}
+            className="block w-full rounded border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-center text-xs uppercase text-sky-200 hover:bg-sky-500/15"
+          >
+            Full dossier
+          </Link>
 
           <section className="grid grid-cols-2 gap-2">
             <Metric label="cash" value={`$${(detail.agent.balance_cents / 100).toFixed(0)}`} />
@@ -97,7 +104,7 @@ export default function AgentDrawer() {
           </section>
 
           <section>
-            <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Needs</h3>
+            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Needs</h3>
             <div className="space-y-1">
               <Bar label="hunger" value={detail.agent.needs.hunger} flip />
               <Bar label="energy" value={detail.agent.needs.energy} />
@@ -107,7 +114,7 @@ export default function AgentDrawer() {
           </section>
 
           <section>
-            <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Traits</h3>
+            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Traits</h3>
             <div className="grid grid-cols-2 gap-1.5 text-[11px] text-zinc-300 font-mono">
               {Object.entries(detail.agent.traits)
                 .filter(([k]) => ['greed', 'risk', 'empathy', 'ambition', 'sociability', 'paranoia'].includes(k))
@@ -121,7 +128,7 @@ export default function AgentDrawer() {
           </section>
 
           <section>
-            <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Career and inventory</h3>
+            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Career and inventory</h3>
             <div className="rounded border border-white/10 bg-black/20 p-2 text-xs text-zinc-300 space-y-1.5">
               <div className="flex justify-between gap-3">
                 <span className="text-zinc-500">role</span>
@@ -144,7 +151,7 @@ export default function AgentDrawer() {
 
           {detail.votes.length > 0 && (
             <section>
-              <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Civic record</h3>
+              <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Civic record</h3>
               <div className="space-y-1 text-xs">
                 {detail.votes.slice(0, 3).map((v) => (
                   <div key={`${v.election_id}-${v.t}`} className="rounded border border-white/5 bg-black/20 px-2 py-1 text-zinc-300">
@@ -156,7 +163,7 @@ export default function AgentDrawer() {
           )}
 
           <section>
-            <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Recent events</h3>
+            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Recent events</h3>
             <div className="space-y-1 text-xs">
               {detail.recentEvents.length === 0 && <p className="text-zinc-500">No events yet.</p>}
               {detail.recentEvents.slice(0, 8).map((e) => (
@@ -171,7 +178,7 @@ export default function AgentDrawer() {
           </section>
 
           <section>
-            <h3 className="text-[10px] uppercase tracking-widest text-zinc-500 mb-1.5">Memory</h3>
+            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Memory</h3>
             <div className="space-y-1.5 text-xs">
               {detail.memories.length === 0 && <p className="text-zinc-500">No memories yet.</p>}
               {detail.memories.slice(0, 5).map((m) => (
@@ -191,7 +198,7 @@ export default function AgentDrawer() {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border border-white/10 bg-black/20 px-2 py-1.5 min-w-0">
-      <div className="text-[10px] uppercase tracking-widest text-zinc-500">{label}</div>
+      <div className="text-[10px] uppercase text-zinc-500">{label}</div>
       <div className="truncate text-xs text-zinc-100">{value}</div>
     </div>
   );
