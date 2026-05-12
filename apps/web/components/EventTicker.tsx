@@ -32,6 +32,9 @@ const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   bounty_paid: { label: 'bounty', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   agent_jailed: { label: 'jailed', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
   agent_released: { label: 'released', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  group_founded: { label: 'group', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
+  group_joined: { label: 'joined', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
+  group_left: { label: 'left', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
   city_founded: { label: 'civic', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   city_tax_collected: { label: 'taxes', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   city_aid_paid: { label: 'aid', tone: 'text-blue-300 border-blue-500/30 bg-blue-500/10' },
@@ -139,6 +142,12 @@ function describeEvent(e: { kind: string; payload: Record<string, unknown> }): s
       return `${String(p.charge ?? 'case')} until ${p.jail_until ? new Date(String(p.jail_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'release'}`;
     case 'agent_released':
       return `parole until ${p.parole_until ? new Date(String(p.parole_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'later'}`;
+    case 'group_founded':
+      return `${String(p.name ?? 'group')} (${String(p.kind ?? 'faction')})`;
+    case 'group_joined':
+      return `${String(p.name ?? 'group')}`;
+    case 'group_left':
+      return `${String(p.name ?? 'group')}`;
     case 'agent_moved':
       return `to ${String(p.to ?? '...')}`;
     case 'agent_homed':

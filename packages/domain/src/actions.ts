@@ -92,7 +92,7 @@ export const ActionSchema = z.discriminatedUnion('kind', [
     kind: z.literal('found_group'),
     name: z.string().min(2).max(60),
     kind_of: z.enum(['cult', 'party', 'union', 'club']),
-    doctrine: z.string().max(800),
+    doctrine: z.string().max(800).optional(),
   }),
   z.object({
     kind: z.literal('broadcast'),

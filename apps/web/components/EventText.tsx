@@ -46,6 +46,12 @@ export function eventText(kind: string, payload: Record<string, unknown> = {}): 
       return `jailed for ${String(payload.charge ?? 'a case')}`;
     case 'agent_released':
       return `released on parole`;
+    case 'group_founded':
+      return `${String(payload.name ?? 'A group')} was founded as a ${String(payload.kind ?? 'group')}`;
+    case 'group_joined':
+      return `joined ${String(payload.name ?? 'a group')}`;
+    case 'group_left':
+      return `left ${String(payload.name ?? 'a group')}`;
     case 'agent_died':
       return `died from ${String(payload.cause ?? 'unknown causes')}`;
     default:

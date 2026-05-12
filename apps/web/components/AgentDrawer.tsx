@@ -285,6 +285,12 @@ function labelEvent(kind: string, payload: Record<string, unknown>): string {
       return `jailed until ${payload.jail_until ? new Date(String(payload.jail_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'release'}`;
     case 'agent_released':
       return `released on parole`;
+    case 'group_founded':
+      return `founded ${String(payload.name ?? 'a group')}`;
+    case 'group_joined':
+      return `joined ${String(payload.name ?? 'a group')}`;
+    case 'group_left':
+      return `left ${String(payload.name ?? 'a group')}`;
     case 'agent_died':
       return `died (${String(payload.cause ?? '…')})`;
     default:

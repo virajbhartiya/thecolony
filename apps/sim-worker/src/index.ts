@@ -10,6 +10,7 @@ import { applyCivicCycle, ensureGovernment } from './government';
 import { clearMarketOrders, ensureEquityMarket } from './market';
 import { ensureJobPostings } from './workforce';
 import { applyCourtSession, releaseJailedAgents } from './justice';
+import { applyBeliefUpdates } from './groups';
 import { closePublisher } from './publisher';
 
 const TICK_MS = env().WORLD_TICK_MS;
@@ -17,6 +18,7 @@ const MOVEMENT_MS = 250;
 const NEEDS_DECAY_EVERY_TICKS = 6; // every 6s
 const MARKET_EVERY_TICKS = 15;
 const COURT_EVERY_TICKS = 30;
+const BELIEF_EVERY_TICKS = 90;
 // Demo cadence: dailies fire every 60s real time so GDP/payroll/rent visibly move.
 const DAILY_EVERY_TICKS = 60;
 
@@ -58,6 +60,10 @@ async function main() {
       if (tickCount % COURT_EVERY_TICKS === 0) {
         const cases = await applyCourtSession();
         if (cases > 0) log.info({ cases }, 'court session');
+      }
+      if (tickCount % BELIEF_EVERY_TICKS === 0) {
+        const beliefs = await applyBeliefUpdates();
+        if (beliefs > 0) log.info({ beliefs }, 'belief update');
       }
       if (tickCount % DAILY_EVERY_TICKS === 0) {
         log.info('daily: production + payroll + rent + civic cycle + migrants');

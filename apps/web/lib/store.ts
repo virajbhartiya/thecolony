@@ -172,6 +172,15 @@ export const useWorld = create<WorldState>((set, get) => ({
         floater(e.actor_ids[0]!, `+$${amt.toFixed(0)} bounty`, '#7ee787');
         break;
       }
+      case 'group_founded':
+        floater(e.actor_ids[0]!, 'founded group', '#bf8cff');
+        break;
+      case 'group_joined':
+        floater(e.actor_ids[0]!, 'joined group', '#bf8cff');
+        break;
+      case 'group_left':
+        floater(e.actor_ids[0]!, 'left group', '#8b949e');
+        break;
       case 'agent_released':
         floater(e.actor_ids[0]!, 'released', '#7ee787');
         break;

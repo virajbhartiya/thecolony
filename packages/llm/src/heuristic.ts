@@ -32,6 +32,18 @@ export interface HeuristicContext {
   company_worker_count?: number;
   company_treasury_cents?: number;
   founder_pressure?: number;
+  current_group_id?: string | null;
+  current_group_name?: string | null;
+  current_group_kind?: string | null;
+  current_group_doctrine?: string | null;
+  candidate_groups?: Array<{
+    id: string;
+    name: string;
+    kind: string;
+    doctrine: string;
+    member_count: number;
+    founder_ideology: number;
+  }>;
   wanted_agent_id?: string | null;
   wanted_incident_id?: string | null;
   wanted_charge?: string | null;
@@ -78,6 +90,28 @@ function pick<T>(arr: T[], rng: () => number): T {
   return arr[Math.floor(rng() * arr.length)]!;
 }
 
+function groupKindFor(agent: Agent, ctx: HeuristicContext): 'cult' | 'party' | 'union' | 'club' {
+  const occupation = (agent.occupation ?? '').toLowerCase();
+  if (agent.traits.paranoia > 0.65 && agent.traits.sociability > 0.5) return 'cult';
+  if (occupation.includes('builder') || occupation.includes('chef') || occupation.includes('farmer') || ctx.has_job) return 'union';
+  if (agent.traits.ambition > 0.72 || occupation.includes('civil')) return 'party';
+  return 'club';
+}
+
+function groupNameFor(agent: Agent, kind: 'cult' | 'party' | 'union' | 'club'): string {
+  const first = agent.name.split(' ')[0] ?? 'City';
+  switch (kind) {
+    case 'cult':
+      return `${first}'s Signal`;
+    case 'party':
+      return `${first} Civic Bloc`;
+    case 'union':
+      return `${first} Labor League`;
+    case 'club':
+      return `${first} Mutual Circle`;
+  }
+}
+
 export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   const { rng } = ctx;
   const hunger = agent.needs.hunger;
@@ -91,6 +125,25 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   const isBroker = (agent.occupation ?? '').toLowerCase().includes('broker');
   const occupation = (agent.occupation ?? '').toLowerCase();
   const isGuard = occupation.includes('guard') || occupation.includes('civil servant');
+
+  if (!ctx.current_group_id && ambition > 0.62 && sociability > 0.55 && rng() < 0.1) {
+    const kind = groupKindFor(agent, ctx);
+    return {
+      kind: 'found_group',
+      kind_of: kind,
+      name: groupNameFor(agent, kind),
+    };
+  }
+
+  if (!ctx.current_group_id && (ctx.candidate_groups?.length ?? 0) > 0 && rng() < sociability * 0.18) {
+    const group = pick(ctx.candidate_groups!, rng);
+    const fit = 1 - Math.min(2, Math.abs(agent.traits.ideology_lean - group.founder_ideology)) / 2;
+    if (fit > 0.45 || group.member_count >= 3) return { kind: 'join_group', group_id: group.id };
+  }
+
+  if (ctx.current_group_id && rng() < Math.max(0, (agent.traits.paranoia - agent.traits.agreeableness) * 0.05)) {
+    return { kind: 'leave_group', group_id: ctx.current_group_id };
+  }
 
   if (ctx.wanted_agent_id && ctx.wanted_incident_id) {
     const bounty = ctx.bounty_cents ?? 0;

@@ -8,6 +8,7 @@ import { log } from './log';
 import { shareAsset, tickerForCompany } from './market';
 import { roleForIndustry, wageForRole } from './workforce';
 import { accuseAgent, createIncident } from './justice';
+import { foundGroup, joinGroup, leaveGroup, loadGroupContext } from './groups';
 
 const TICK_INTERVAL_MS = 60 * 1000; // 60s real seconds between decisions
 
@@ -107,6 +108,7 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     .from(schema.company)
     .where(eq(schema.company.founder_id, agent.id))
     .limit(1);
+  const groupContext = await loadGroupContext(agent);
 
   let hireCandidateId: string | null = null;
   let hireRole: string | null = null;
@@ -266,6 +268,7 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     fire_candidate_id: fireCandidateId,
     company_worker_count: companyWorkerCount,
     company_treasury_cents: Number(ownedCompany[0]?.treasury_cents ?? 0),
+    ...groupContext,
     wanted_agent_id: wanted?.agent_id ?? null,
     wanted_incident_id: wanted?.incident_id ?? null,
     wanted_charge: wanted?.charge ?? null,
@@ -825,6 +828,15 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       if (action.target_agent_id !== agent.id) {
         await accuseAgent(agent.id, action.target_agent_id, action.charge, action.incident_id ?? null);
       }
+      return;
+    case 'found_group':
+      await foundGroup(agent, action);
+      return;
+    case 'join_group':
+      await joinGroup(agent, action.group_id);
+      return;
+    case 'leave_group':
+      await leaveGroup(agent, action.group_id);
       return;
     default:
       // unimplemented v1 actions degrade to idle

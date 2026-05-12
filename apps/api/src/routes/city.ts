@@ -484,8 +484,9 @@ export async function registerCityRoutes(app: FastifyInstance) {
       founder_name: string | null;
       doctrine: string;
       member_count: number;
+      founded_at: string;
     }>(sql`
-      SELECT g.id, g.name, g.kind, g.founder_id, a.name AS founder_name, g.doctrine,
+      SELECT g.id, g.name, g.kind, g.founder_id, a.name AS founder_name, g.doctrine, g.founded_at,
         COUNT(m.agent_id)::int AS member_count
       FROM ${schema.ideology_group} g
       LEFT JOIN ${schema.agent} a ON a.id = g.founder_id
@@ -493,7 +494,13 @@ export async function registerCityRoutes(app: FastifyInstance) {
       GROUP BY g.id, g.name, g.kind, g.founder_id, a.name, g.doctrine
       ORDER BY member_count DESC, g.founded_at DESC
     `);
-    return { groups };
+    const recentActivity = await db
+      .select()
+      .from(schema.world_event)
+      .where(sql`${schema.world_event.kind} IN ('group_founded', 'group_joined', 'group_left')`)
+      .orderBy(desc(schema.world_event.t))
+      .limit(60);
+    return { groups, recentActivity };
   });
 
   app.get('/v1/history', async () => {
@@ -555,6 +562,12 @@ function headlineFor(kind: string, payload: Record<string, unknown>): string {
       return `${String(payload.company ?? 'A company')} hires a ${String(payload.role ?? 'worker')}`;
     case 'agent_fired':
       return `${String(payload.company ?? 'A company')} fires a ${String(payload.role ?? 'worker')}`;
+    case 'group_founded':
+      return `${String(payload.name ?? 'A faction')} forms as a ${String(payload.kind ?? 'group')}`;
+    case 'group_joined':
+      return `A citizen joins ${String(payload.name ?? 'a faction')}`;
+    case 'group_left':
+      return `A citizen leaves ${String(payload.name ?? 'a faction')}`;
     case 'agent_evicted':
       return `Eviction at $${money(payload.rent)} daily rent`;
     case 'agent_died':
