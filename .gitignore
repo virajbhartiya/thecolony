@@ -42,3 +42,6 @@ coverage
 # generated
 apps/web/.next/
 apps/web/out/
+
+# SSH keys
+*.pem
