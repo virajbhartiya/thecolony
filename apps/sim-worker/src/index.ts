@@ -12,6 +12,7 @@ import { ensureJobPostings } from './workforce';
 import { applyCourtSession, releaseJailedAgents } from './justice';
 import { applyBeliefUpdates } from './groups';
 import { applyConceptions, sweepLifecycle } from './lifecycle';
+import { generateDailyReport } from './daily-report';
 import { closePublisher } from './publisher';
 
 const TICK_MS = env().WORLD_TICK_MS;
@@ -78,6 +79,8 @@ async function main() {
         await spawnMigrantsIfNeeded();
         const births = await applyConceptions();
         if (births > 0) log.info({ births }, 'births');
+        const report = await generateDailyReport();
+        if (report?.created) log.info({ slug: report.report.slug }, 'daily report');
       }
     } catch (e) {
       log.error({ err: (e as Error).message }, 'tick error');

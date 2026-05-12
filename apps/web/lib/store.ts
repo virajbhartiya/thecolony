@@ -199,6 +199,9 @@ export const useWorld = create<WorldState>((set, get) => ({
       case 'birth':
         floater(e.actor_ids[0]!, 'new citizen', '#7ee787');
         break;
+      case 'news_headline':
+        for (const id of e.actor_ids.slice(0, 3)) floater(id, 'news', '#58a6ff');
+        break;
     }
     const events = [e, ...get().events].slice(0, 200);
     set({ agents, events });

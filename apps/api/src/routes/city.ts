@@ -577,6 +577,30 @@ export async function registerCityRoutes(app: FastifyInstance) {
   });
 
   app.get('/v1/news', async () => {
+    const reports = await db.execute<{
+      key: string;
+      value: {
+        slug: string;
+        date: string;
+        title: string;
+        summary: string;
+        markdown_path: string;
+        generated_at: string;
+        counts: Record<string, number>;
+        top_stories: string[];
+        company_notes: string[];
+        civic_notes: string[];
+        markdown?: string;
+      };
+      updated_at: string;
+    }>(sql`
+      SELECT key, value, updated_at
+      FROM ${schema.city_state}
+      WHERE key LIKE 'daily_report:%'
+      ORDER BY updated_at DESC
+      LIMIT 20
+    `);
+
     const events = await db
       .select()
       .from(schema.world_event)
@@ -593,7 +617,12 @@ export async function registerCityRoutes(app: FastifyInstance) {
       payload: event.payload,
     }));
 
-    return { headlines, events };
+    return {
+      headlines,
+      events,
+      reports: reports.map((row) => row.value),
+      latestReport: reports[0]?.value ?? null,
+    };
   });
 }
 
@@ -643,6 +672,8 @@ function headlineFor(kind: string, payload: Record<string, unknown>): string {
       return `A citizen is jailed for ${String(payload.charge ?? 'a case')}`;
     case 'agent_released':
       return `A citizen is released on parole`;
+    case 'news_headline':
+      return String(payload.title ?? 'The Daily Ledger publishes a city report');
     default:
       return kind.replaceAll('_', ' ');
   }

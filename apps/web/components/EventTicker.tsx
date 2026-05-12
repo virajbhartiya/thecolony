@@ -59,6 +59,7 @@ const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   group_founded: { label: 'group', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
   group_joined: { label: 'joined', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
   group_left: { label: 'left', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
+  news_headline: { label: 'news', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
   city_founded: { label: 'civic', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   city_tax_collected: { label: 'taxes', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   city_aid_paid: { label: 'aid', tone: 'text-blue-300 border-blue-500/30 bg-blue-500/10' },
@@ -185,6 +186,8 @@ function describeEvent(e: { kind: string; payload: Record<string, unknown> }): s
       return `${String(p.name ?? 'group')}`;
     case 'group_left':
       return `${String(p.name ?? 'group')}`;
+    case 'news_headline':
+      return String(p.title ?? 'daily report published');
     case 'agent_moved':
       return `to ${String(p.to ?? '...')}`;
     case 'agent_homed':

@@ -62,6 +62,8 @@ export function eventText(kind: string, payload: Record<string, unknown> = {}): 
       return `declared bankrupt`;
     case 'agent_died':
       return `died from ${String(payload.cause ?? 'unknown causes')}`;
+    case 'news_headline':
+      return String(payload.title ?? 'The Daily Ledger published a city report');
     default:
       return kind.replaceAll('_', ' ');
   }

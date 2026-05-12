@@ -15,6 +15,7 @@ import {
 import { log } from './log';
 import { ensureEquityMarket } from './market';
 import { ensureJobPostings } from './workforce';
+import { generateDailyReport } from './daily-report';
 
 async function main() {
   log.info('seeding world');
@@ -289,6 +290,7 @@ async function main() {
   });
   await ensureEquityMarket();
   await ensureJobPostings();
+  await generateDailyReport({ force: true });
 
   log.info('seed complete');
 }
