@@ -52,6 +52,8 @@ export const WorldEventKind = z.enum([
   'mayor_elected',
   'birth',
   'migrant_arrived',
+  'building_proposed',
+  'building_opened',
 ]);
 export type WorldEventKind = z.infer<typeof WorldEventKind>;
 

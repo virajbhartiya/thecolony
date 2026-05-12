@@ -115,6 +115,8 @@ export async function applyCourtSession(limit = COURT_LIMIT): Promise<number> {
   let processed = 0;
   for (const incident of rows) {
     if (!incident.perp_id) continue;
+    // Pull the defendant into the courthouse for the trial.
+    await summonToCourt(incident.perp_id);
     const guilty = Number(incident.severity) + Number(incident.warrants) + Number(incident.evidence_count) >= 2;
     if (!guilty) {
       await db.update(schema.incident).set({ resolved: true }).where(eq(schema.incident.id, incident.id));
@@ -331,6 +333,8 @@ async function moveToJail(agentId: string): Promise<void> {
   const updates: {
     status: string;
     state: string;
+    pos_x?: number;
+    pos_y?: number;
     target_x?: number;
     target_y?: number;
     updated_at: Date;
@@ -340,12 +344,43 @@ async function moveToJail(agentId: string): Promise<void> {
     updated_at: new Date(),
   };
   if (jail) {
-    updates.target_x = jail.tile_x + 0.5;
-    updates.target_y = jail.tile_y + 0.5;
+    // Teleport into the cell — no leisurely walk to prison.
+    const px = jail.tile_x + 0.5;
+    const py = jail.tile_y + 0.5;
+    updates.pos_x = px;
+    updates.pos_y = py;
+    updates.target_x = px;
+    updates.target_y = py;
   }
   await db
     .update(schema.agent)
     .set(updates)
+    .where(eq(schema.agent.id, agentId));
+}
+
+/**
+ * Pull a defendant into the courthouse so they're physically inside it
+ * during their trial. Called before each verdict.
+ */
+export async function summonToCourt(agentId: string): Promise<void> {
+  const [court] = await db
+    .select()
+    .from(schema.building)
+    .where(eq(schema.building.kind, 'court'))
+    .limit(1);
+  if (!court) return;
+  const px = court.tile_x + 0.5 + (Math.random() - 0.5) * 0.6;
+  const py = court.tile_y + 0.5 + (Math.random() - 0.5) * 0.6;
+  await db
+    .update(schema.agent)
+    .set({
+      pos_x: px,
+      pos_y: py,
+      target_x: px,
+      target_y: py,
+      state: 'speaking',
+      updated_at: new Date(),
+    })
     .where(eq(schema.agent.id, agentId));
 }
 

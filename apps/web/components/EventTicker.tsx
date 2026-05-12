@@ -85,8 +85,6 @@ export default function EventTicker() {
 
   const visible = useMemo(() => events.filter((e) => e.importance >= 1).slice(0, 18), [events]);
 
-  if (!panelVisible) return null;
-
   const agentName = (id: string) => agents.get(id)?.name ?? id.slice(0, 6);
   const buildingName = (id: string | null) =>
     buildings.find((b) => b.id === id)?.name ?? '';
@@ -109,6 +107,8 @@ export default function EventTicker() {
       clearInterval(id);
     };
   }, []);
+
+  if (!panelVisible) return null;
 
   return (
     <div

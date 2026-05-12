@@ -6,6 +6,7 @@ import { stepMovement } from './movement';
 import { decayNeedsAll, sweepDeaths } from './needs';
 import { applyPayroll, collectRent, applyDailyProduction } from './economy';
 import { spawnMigrantsIfNeeded } from './migrants';
+import { advanceConstruction } from './construction';
 import { applyCivicCycle, ensureGovernment } from './government';
 import { clearMarketOrders, ensureEquityMarket } from './market';
 import { ensureJobPostings } from './workforce';
@@ -77,6 +78,7 @@ async function main() {
         await ensureEquityMarket();
         await ensureJobPostings();
         await spawnMigrantsIfNeeded();
+        await advanceConstruction();
         const births = await applyConceptions();
         if (births > 0) log.info({ births }, 'births');
         const report = await generateDailyReport();

@@ -11,6 +11,7 @@ import { accuseAgent, createIncident } from './justice';
 import { foundGroup, joinGroup, leaveGroup, loadGroupContext } from './groups';
 import { markAgentDead } from './lifecycle';
 import { recordAgentDecisionLog } from './decision-log';
+import { proposeBuilding } from './construction';
 
 const TICK_INTERVAL_MS = 60 * 1000; // 60s real seconds between decisions
 
@@ -1057,6 +1058,20 @@ export async function applyAction(
     case 'leave_group':
       await leaveGroup(agent, action.group_id);
       return;
+    case 'propose_building': {
+      await proposeBuilding(
+        {
+          id: agent.id,
+          name: agent.name,
+          balance_cents: Number(agent.balance_cents),
+          pos_x: agent.pos_x,
+          pos_y: agent.pos_y,
+        },
+        action.building_kind,
+        action.capital_cents,
+      );
+      return;
+    }
     default:
       // unimplemented v1 actions degrade to idle
       await db.update(schema.agent).set({ state: 'idle' }).where(eq(schema.agent.id, agent.id));

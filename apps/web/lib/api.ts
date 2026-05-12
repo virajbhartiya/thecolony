@@ -30,6 +30,7 @@ export interface WorldSnapshot {
     capacity: number;
     rent_cents: number;
     sprite_key: string;
+    condition?: number;
   }>;
   agents: Array<{
     id: string;

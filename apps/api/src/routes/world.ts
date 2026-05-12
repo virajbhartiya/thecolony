@@ -24,6 +24,7 @@ export async function registerWorldRoutes(app: FastifyInstance) {
         capacity: schema.building.capacity,
         rent_cents: schema.building.rent_cents,
         sprite_key: schema.building.sprite_key,
+        condition: schema.building.condition,
       })
       .from(schema.building);
 

@@ -246,6 +246,18 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
     };
   }
 
+  // Propose a new building. Triggered by deep pockets + ambition. Chooses kind
+  // based on what's needed (more shops if shops are crowded, etc.). For
+  // simplicity weights by the agent's risk appetite.
+  if (bal > 12000 && ambition > 0.55 && risk > 0.4 && rng() < 0.04) {
+    const pool: Array<'shop' | 'bar' | 'cafe' | 'factory' | 'farm' | 'house' | 'apartment'> = [
+      'shop', 'shop', 'cafe', 'bar', 'farm', 'house', 'apartment', 'factory',
+    ];
+    const choice = pool[Math.floor(rng() * pool.length)] ?? 'shop';
+    const capital = Math.min(20000, Math.floor(bal * 0.55));
+    return { kind: 'propose_building', building_kind: choice, capital_cents: capital };
+  }
+
   // sleep urgent
   if (energy < 20) {
     const home = ctx.buildings.find((b) => b.id === agent.home_id);

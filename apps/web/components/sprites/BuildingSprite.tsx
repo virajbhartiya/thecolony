@@ -10,6 +10,7 @@ export interface BuildingSpriteData {
   tile_y: number;
   tile_w: number;
   tile_h: number;
+  condition?: number;
 }
 
 interface Props {
@@ -43,7 +44,11 @@ export default function BuildingSprite({ b, hovered, selected, lit, heat, onClic
   const v = variant(b.id);
   const w = b.tile_w;
   const h = b.tile_h;
-  const elev = palette.elev;
+  // Under construction → render at scaled-down elevation as scaffolding rises.
+  const condition = b.condition ?? 100;
+  const construction = condition < 100;
+  const buildProgress = Math.max(0.05, condition / 100);
+  const elev = Math.round(palette.elev * buildProgress);
   const roofColor = shade(palette.roof, v.roofTint);
   const wallColor = shade(palette.wall, v.wallTint);
 
@@ -231,6 +236,34 @@ export default function BuildingSprite({ b, hovered, selected, lit, heat, onClic
           stroke="#0b0a10"
           strokeWidth={0.5}
         />
+      )}
+
+      {construction && (
+        <g>
+          {/* scaffolding poles at the building corners */}
+          <line x1={fpLeft.x} y1={fpLeft.y} x2={fpLeft.x} y2={fpLeft.y - palette.elev} stroke="#f0c84a" strokeWidth={1.5} strokeDasharray="2 2" />
+          <line x1={fpRight.x} y1={fpRight.y} x2={fpRight.x} y2={fpRight.y - palette.elev} stroke="#f0c84a" strokeWidth={1.5} strokeDasharray="2 2" />
+          <line x1={fpTop.x} y1={fpTop.y} x2={fpTop.x} y2={fpTop.y - palette.elev} stroke="#f0c84a" strokeWidth={1.5} strokeDasharray="2 2" />
+          <line x1={fpBot.x} y1={fpBot.y} x2={fpBot.x} y2={fpBot.y - palette.elev} stroke="#f0c84a" strokeWidth={1.5} strokeDasharray="2 2" />
+          {/* crossbeams at full height */}
+          <line x1={fpLeft.x} y1={fpLeft.y - palette.elev} x2={fpTop.x} y2={fpTop.y - palette.elev} stroke="#f0c84a" strokeWidth={1} strokeDasharray="1 2" />
+          <line x1={fpTop.x} y1={fpTop.y - palette.elev} x2={fpRight.x} y2={fpRight.y - palette.elev} stroke="#f0c84a" strokeWidth={1} strokeDasharray="1 2" />
+          <line x1={fpRight.x} y1={fpRight.y - palette.elev} x2={fpBot.x} y2={fpBot.y - palette.elev} stroke="#f0c84a" strokeWidth={1} strokeDasharray="1 2" />
+          {/* hazard cone */}
+          <polygon
+            points={`${fpBot.x},${fpBot.y - 12} ${fpBot.x - 3},${fpBot.y} ${fpBot.x + 3},${fpBot.y}`}
+            fill="#f0a347"
+            stroke="#0b0a10"
+            strokeWidth={0.6}
+          />
+          {/* progress label */}
+          <g transform={`translate(${(fpTop.x + fpBot.x) / 2}, ${fpTop.y - palette.elev - 8})`}>
+            <rect x={-18} y={-8} width={36} height={12} fill="#1c1925" stroke="#f0c84a" strokeWidth={0.5} />
+            <text x={0} y={1} fontFamily="Silkscreen, monospace" fontSize={8} fill="#f0c84a" textAnchor="middle">
+              {Math.round(condition)}%
+            </text>
+          </g>
+        </g>
       )}
 
       {(hovered || selected) && (

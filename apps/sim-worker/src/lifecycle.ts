@@ -5,6 +5,67 @@ import type { Traits } from '@thecolony/domain';
 import { genName, genStarterNeeds, mulberry32 } from '@thecolony/sim';
 import { writeEvent } from './event-writer';
 
+/**
+ * When a founder goes bankrupt, their company's stock cratters: cancel all open
+ * orders, dissolve the company, and write a price observation at 5% of the last
+ * price so the market chart reflects the crash.
+ */
+async function cascadeBankruptcyToMarket(founderId: string, founderName: string): Promise<void> {
+  const companies = await db
+    .select({
+      id: schema.company.id,
+      name: schema.company.name,
+      ticker: schema.company.ticker,
+    })
+    .from(schema.company)
+    .where(sql`founder_id = ${founderId} AND dissolved_at IS NULL`);
+
+  for (const c of companies) {
+    const asset = `shares:${c.id}`;
+    // crash price
+    const [lastPrice] = await db.execute<{ price_cents: number }>(sql`
+      SELECT price_cents FROM ${schema.price_observation}
+      WHERE asset = ${asset}
+      ORDER BY t DESC LIMIT 1
+    `);
+    const crashedPrice = Math.max(1, Math.floor(Number(lastPrice?.price_cents ?? 100) * 0.05));
+    await db.insert(schema.price_observation).values({
+      asset,
+      price_cents: crashedPrice,
+      qty: 0,
+    });
+    // cancel open orders
+    await db.execute(sql`
+      UPDATE ${schema.market_order}
+      SET status = 'cancelled'
+      WHERE asset = ${asset} AND status IN ('open', 'partial')
+    `);
+    // dissolve
+    await db
+      .update(schema.company)
+      .set({ dissolved_at: new Date() })
+      .where(eq(schema.company.id, c.id));
+    // end all jobs
+    await db.execute(sql`
+      UPDATE ${schema.job} SET ended_at = now()
+      WHERE company_id = ${c.id} AND ended_at IS NULL
+    `);
+    await writeEvent({
+      kind: 'company_dissolved',
+      actor_ids: [founderId],
+      importance: 8,
+      payload: {
+        company_id: c.id,
+        company_name: c.name,
+        ticker: c.ticker,
+        crashed_to_cents: crashedPrice,
+        founder_name: founderName,
+        cause: 'founder_bankruptcy',
+      },
+    });
+  }
+}
+
 export async function markAgentDead(agentId: string, cause: string): Promise<boolean> {
   const [agent] = await db.select().from(schema.agent).where(eq(schema.agent.id, agentId)).limit(1);
   if (!agent || agent.status === 'dead') return false;
@@ -94,6 +155,7 @@ export async function sweepLifecycle(): Promise<{ old_age: number; suicide: numb
       importance: 7,
       payload: { name: row.name },
     });
+    await cascadeBankruptcyToMarket(row.id, row.name);
   }
 
   return { old_age: oldAgeDeaths, suicide: suicideDeaths, bankrupt: bankrupt.length };

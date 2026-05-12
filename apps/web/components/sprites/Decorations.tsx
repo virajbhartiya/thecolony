@@ -56,13 +56,13 @@ export default function Decorations({ width, height, buildings, lit, nowMs }: Pr
         if (occupied.has(`${tx},${ty}`)) continue;
         const t = terrain[ty]![tx]!;
         const h = hash(tx, ty, 1);
-        // trees scattered on grass
-        if (t === 'grass' && h % 100 < 7) out.push({ kind: 'tree', tx, ty, seed: h });
+        // trees scattered on grass (denser now)
+        if (t === 'grass' && h % 100 < 14) out.push({ kind: 'tree', tx, ty, seed: h });
         // street lamps every few tiles along roads
-        else if (t === 'road' && h % 100 < 8 && (tx + ty) % 4 === 0)
+        else if (t === 'road' && h % 100 < 14 && (tx + ty) % 3 === 0)
           out.push({ kind: 'lamp', tx, ty, seed: h });
         // boats on water
-        else if (t === 'water' && h % 100 < 4) out.push({ kind: 'boat', tx, ty, seed: h });
+        else if (t === 'water' && h % 100 < 7) out.push({ kind: 'boat', tx, ty, seed: h });
       }
     }
     // benches near parks/temples, carts near shops

@@ -3,8 +3,8 @@ import { sql, eq } from 'drizzle-orm';
 import { applyProfessionBias, genName, genTraits, genStarterNeeds, mulberry32, pickProfession } from '@thecolony/sim';
 import { writeEvent } from './event-writer';
 
-const POP_FLOOR = 25;
-const SPAWN_PER_DAY = 2;
+const POP_FLOOR = 55;
+const SPAWN_PER_DAY = 4;
 
 export async function spawnMigrantsIfNeeded(): Promise<void> {
   const [{ n: alive } = { n: 0 }] = await db.execute<{ n: number }>(

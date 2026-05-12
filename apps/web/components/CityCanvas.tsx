@@ -368,6 +368,7 @@ export default function CityCanvas({ className }: { className?: string }) {
                     tile_y: b.tile_y,
                     tile_w: b.tile_w,
                     tile_h: b.tile_h,
+                    condition: (b as { condition?: number }).condition,
                   }}
                   lit={lit}
                   hovered={hovered?.kind === 'building' && hovered.id === b.id}
