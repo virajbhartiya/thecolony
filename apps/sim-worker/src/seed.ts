@@ -87,24 +87,32 @@ async function main() {
   for (let i = 0; i < count; i++) {
     const home = homeCandidates[Math.floor(rng() * homeCandidates.length)];
     const pos = home ? { x: home.tile_x + 0.5, y: home.tile_y + 0.5 } : { x: 30, y: 30 };
-    await db.insert(schema.agent).values({
-      name: genName(rng),
-      born_at: new Date(Date.now() - (18 + Math.floor(rng() * 50)) * 365 * 86400_000),
-      age_years: 18 + Math.floor(rng() * 50),
-      traits: genTraits(rng),
-      needs: genStarterNeeds(),
-      occupation: null,
-      employer_id: null,
-      home_id: home?.id ?? null,
-      balance_cents: 5000 + Math.floor(rng() * 5000),
-      status: 'alive',
-      portrait_seed: `seed-${i}-${Math.floor(rng() * 1e9)}`,
-      pos_x: pos.x,
-      pos_y: pos.y,
-      target_x: pos.x,
-      target_y: pos.y,
-      state: 'idle',
-    });
+    const [created] = await db
+      .insert(schema.agent)
+      .values({
+        name: genName(rng),
+        born_at: new Date(Date.now() - (18 + Math.floor(rng() * 50)) * 365 * 86400_000),
+        age_years: 18 + Math.floor(rng() * 50),
+        traits: genTraits(rng),
+        needs: genStarterNeeds(),
+        occupation: null,
+        employer_id: null,
+        home_id: home?.id ?? null,
+        balance_cents: 5000 + Math.floor(rng() * 5000),
+        status: 'alive',
+        portrait_seed: `seed-${i}-${Math.floor(rng() * 1e9)}`,
+        pos_x: pos.x,
+        pos_y: pos.y,
+        target_x: pos.x,
+        target_y: pos.y,
+        state: 'idle',
+      })
+      .returning({ id: schema.agent.id });
+    // starter inventory: 10 food, 5 water — enough runway to act on hunger
+    await db.insert(schema.inventory).values([
+      { owner_kind: 'agent', owner_id: created!.id, item_id: 1, qty: 10 },
+      { owner_kind: 'agent', owner_id: created!.id, item_id: 2, qty: 5 },
+    ]);
   }
   log.info({ count }, 'inserted agents');
 

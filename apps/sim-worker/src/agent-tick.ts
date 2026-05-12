@@ -82,6 +82,26 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     sql`SELECT COALESCE(qty,0) AS qty FROM ${schema.inventory} WHERE owner_kind='agent' AND owner_id=${agent.id} AND item_id=1`,
   );
 
+  // nearest rich agent (balance > $20) — for stealing
+  const richRow = await db.execute<{ id: string; balance_cents: number }>(sql`
+    SELECT id, balance_cents
+    FROM ${schema.agent}
+    WHERE status = 'alive' AND id <> ${agent.id} AND balance_cents > 2000
+    ORDER BY ((pos_x - ${agent.pos_x})^2 + (pos_y - ${agent.pos_y})^2) ASC
+    LIMIT 1
+  `);
+  const nearbyRich = richRow[0]?.id ?? null;
+
+  // are we currently inside a shop's footprint?
+  const shopHere = allBuildings.find(
+    (b) =>
+      b.kind === 'shop' &&
+      agent.pos_x >= b.tile_x &&
+      agent.pos_x <= b.tile_x + 2 &&
+      agent.pos_y >= b.tile_y &&
+      agent.pos_y <= b.tile_y + 2,
+  );
+
   return {
     buildings,
     nearby_agents: nearbyAgents.map((a) => ({
@@ -93,6 +113,8 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     has_home: !!agent.home_id,
     food_qty: Number(foodInv[0]?.qty ?? 0),
     rng: mulberry32(hashStringSeed(agent.id + Date.now().toString())),
+    nearby_rich_agent_id: nearbyRich,
+    at_shop_id: shopHere?.id ?? null,
   };
 }
 
@@ -208,6 +230,106 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
     case 'reflect':
       await writeEvent({ kind: 'agent_reflected', actor_ids: [agent.id], importance: 1 });
       return;
+    case 'buy': {
+      if (action.item !== 'food') return;
+      const price = Math.min(action.max_price_cents, 300);
+      if (Number(agent.balance_cents) < price) return;
+      // find any shop company with food in stock
+      const shops = await db.execute<{ company_id: string; qty: number }>(sql`
+        SELECT c.id AS company_id, i.qty AS qty
+        FROM ${schema.company} c
+        JOIN ${schema.inventory} i
+          ON i.owner_kind = 'company' AND i.owner_id = c.id AND i.item_id = 1
+        WHERE c.industry IN ('shop','farm') AND i.qty > 0
+        ORDER BY i.qty DESC
+        LIMIT 1
+      `);
+      const shop = shops[0];
+      if (!shop) return;
+      const qty = Math.min(action.qty, Number(shop.qty));
+      const total = price * qty;
+      await db.execute(sql`
+        UPDATE ${schema.inventory} SET qty = qty - ${qty}
+        WHERE owner_kind='company' AND owner_id=${shop.company_id} AND item_id=1
+      `);
+      await db.execute(sql`
+        INSERT INTO ${schema.inventory} (owner_kind, owner_id, item_id, qty)
+        VALUES ('agent', ${agent.id}, 1, ${qty})
+        ON CONFLICT (owner_kind, owner_id, item_id) DO UPDATE SET qty = ${schema.inventory.qty} + EXCLUDED.qty
+      `);
+      await db
+        .update(schema.agent)
+        .set({ balance_cents: sql`${schema.agent.balance_cents} - ${total}` })
+        .where(eq(schema.agent.id, agent.id));
+      await db
+        .update(schema.company)
+        .set({ treasury_cents: sql`${schema.company.treasury_cents} + ${total}` })
+        .where(eq(schema.company.id, shop.company_id));
+      await db.insert(schema.ledger_entry).values({
+        debit_kind: 'agent',
+        debit_id: agent.id,
+        credit_kind: 'company',
+        credit_id: shop.company_id,
+        amount_cents: total,
+        reason: 'purchase',
+      });
+      await writeEvent({
+        kind: 'agent_bought',
+        actor_ids: [agent.id, shop.company_id],
+        importance: 2,
+        payload: { item: 'food', qty, amount_cents: total },
+      });
+      return;
+    }
+    case 'steal': {
+      const targetId = action.target_agent_id;
+      const [target] = await db.select().from(schema.agent).where(eq(schema.agent.id, targetId)).limit(1);
+      if (!target || target.status !== 'alive') return;
+      const loot = Math.min(Number(target.balance_cents), 500 + Math.floor(Math.random() * 1500));
+      if (loot <= 0) return;
+      await db
+        .update(schema.agent)
+        .set({ balance_cents: sql`${schema.agent.balance_cents} - ${loot}` })
+        .where(eq(schema.agent.id, targetId));
+      await db
+        .update(schema.agent)
+        .set({ balance_cents: sql`${schema.agent.balance_cents} + ${loot}` })
+        .where(eq(schema.agent.id, agent.id));
+      await db.insert(schema.ledger_entry).values({
+        debit_kind: 'agent',
+        debit_id: targetId,
+        credit_kind: 'agent',
+        credit_id: agent.id,
+        amount_cents: loot,
+        reason: 'theft',
+      });
+      const [inc] = await db
+        .insert(schema.incident)
+        .values({
+          kind: 'theft',
+          perp_id: agent.id,
+          victim_id: targetId,
+          severity: 2,
+          resolved: false,
+        })
+        .returning({ id: schema.incident.id });
+      await writeEvent({
+        kind: 'incident_theft',
+        actor_ids: [agent.id, targetId],
+        importance: 7,
+        payload: { amount_cents: loot, incident_id: inc!.id },
+      });
+      // mark relationship: victim's affinity toward perp tanks
+      await db.execute(sql`
+        INSERT INTO ${schema.agent_relationship} (subj_id, obj_id, affinity, trust, tags)
+        VALUES (${targetId}, ${agent.id}, -60, -50, ARRAY['robbed_by'])
+        ON CONFLICT (subj_id, obj_id) DO UPDATE
+          SET affinity = LEAST(100, GREATEST(-100, ${schema.agent_relationship.affinity} - 60)),
+              trust    = LEAST(100, GREATEST(-100, ${schema.agent_relationship.trust} - 50)),
+              tags     = ARRAY['robbed_by']
+      `);
+      return;
+    }
     default:
       // unimplemented v1 actions degrade to idle
       await db.update(schema.agent).set({ state: 'idle' }).where(eq(schema.agent.id, agent.id));

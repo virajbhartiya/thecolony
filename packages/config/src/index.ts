@@ -33,6 +33,7 @@ const EnvSchema = z.object({
   WORLD_TICK_MS: z.coerce.number().default(1000),
   SIM_AGENT_COUNT: z.coerce.number().int().default(30),
   LLM_HOURLY_USD_CAP: z.coerce.number().default(5),
+  LLM_MAX_RPM: z.coerce.number().int().default(2),
 
   API_PORT: z.coerce.number().default(3001),
   API_HOST: z.string().default('0.0.0.0'),

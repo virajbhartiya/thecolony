@@ -22,6 +22,9 @@ export interface HeuristicContext {
   has_home: boolean;
   food_qty: number;
   rng: () => number;
+  /** Optional richer signals — keep optional so existing callers don't break. */
+  nearby_rich_agent_id?: string | null;
+  at_shop_id?: string | null;
 }
 
 // Tiny RNG factory so the heuristic is deterministic per agent-tick if needed.
@@ -60,6 +63,9 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   const hunger = agent.needs.hunger;
   const energy = agent.needs.energy;
   const sociability = agent.traits.sociability;
+  const greed = agent.traits.greed;
+  const empathy = agent.traits.empathy;
+  const bal = agent.balance_cents;
 
   // sleep urgent
   if (energy < 20) {
@@ -70,20 +76,35 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
     return { kind: 'sleep' };
   }
 
-  // eat urgent
-  if (hunger > 70 && ctx.food_qty > 0) {
+  // eat urgent — from personal stash
+  if (hunger > 60 && ctx.food_qty > 0) {
     return { kind: 'eat', food_qty: 1 };
   }
-  if (hunger > 65) {
-    const shop = ctx.buildings.find((b) => b.kind === 'shop');
+  // hungry + at a shop with money → buy food
+  if (hunger > 40 && ctx.at_shop_id && bal >= 500) {
+    return { kind: 'buy', item: 'food', qty: Math.min(3, Math.floor(bal / 400)), max_price_cents: 500 };
+  }
+  // hungry, no shop nearby → walk to one
+  if (hunger > 45) {
+    const shop = ctx.buildings.find((b) => b.kind === 'shop' || b.kind === 'bar');
     if (shop) return { kind: 'move', to_building_id: shop.id };
+  }
+
+  // CRIME: any combination of broke + greedy/desperate near a wealthier target.
+  // Either a broke greedy agent OR a hungry low-empathy agent will try.
+  if (ctx.nearby_rich_agent_id) {
+    const desperate = bal < 2000 && (greed > 0.45 || hunger > 70);
+    const opportunistic = greed > 0.7 && empathy < 0.45;
+    if ((desperate || opportunistic) && rng() < 0.45) {
+      return { kind: 'steal', target_agent_id: ctx.nearby_rich_agent_id, item_or_money: 'money' };
+    }
   }
 
   // working
   if (ctx.has_job && rng() < 0.3) {
     return { kind: 'work' };
   }
-  if (!ctx.has_job && rng() < 0.15) {
+  if (!ctx.has_job && rng() < 0.2) {
     return { kind: 'seek_job' };
   }
 

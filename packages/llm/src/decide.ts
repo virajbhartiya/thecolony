@@ -1,6 +1,7 @@
 import { env, hasLLMKey } from '@thecolony/config';
 import { ActionSchema, type Action, type Agent } from '@thecolony/domain';
 import { heuristicDecide, type HeuristicContext } from './heuristic';
+import { canCallLLM, recordCall } from './rate-limit';
 
 export interface DecisionInput {
   agent: Agent;
@@ -20,11 +21,18 @@ export async function decide(input: DecisionInput): Promise<DecisionOutput> {
   if (!hasLLMKey()) {
     return { action: heuristicDecide(input.agent, input.context), source: 'heuristic' };
   }
+  if (!canCallLLM()) {
+    return { action: heuristicDecide(input.agent, input.context), source: 'heuristic' };
+  }
+  recordCall();
   try {
-    const llm = await import('./openai-decide.js');
+    const llm = await import('./openai-decide');
     return await llm.llmDecide(input);
   } catch (e) {
-    console.warn('[llm] decide fell back to heuristic:', (e as Error).message);
+    const msg = (e as Error).message ?? '';
+    if (!msg.includes('Rate limit')) {
+      console.warn('[llm] decide fell back to heuristic:', msg.slice(0, 160));
+    }
     return { action: heuristicDecide(input.agent, input.context), source: 'heuristic' };
   }
 }

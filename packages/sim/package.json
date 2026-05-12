@@ -14,13 +14,14 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "test": "echo '(no tests yet)'",
+    "test": "tsx --test src/*.test.ts",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
     "@thecolony/domain": "workspace:*"
   },
   "devDependencies": {
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }

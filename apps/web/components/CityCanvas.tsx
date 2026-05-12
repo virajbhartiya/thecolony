@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useWorld } from '../lib/store';
 import { tileToWorld, TILE_W, TILE_H } from '../lib/iso';
 import { generateTerrain } from '../lib/terrain';
@@ -7,476 +7,518 @@ import { generateTerrain } from '../lib/terrain';
 const ZOOM_MIN = 0.4;
 const ZOOM_MAX = 2.5;
 
-const TERRAIN_COLORS: Record<string, number> = {
-  grass: 0x4d7a3a,
-  road: 0x3a3a44,
-  water: 0x2a55a8,
-  sand: 0xcdb87a,
-  plaza: 0x7a7363,
-  sidewalk: 0x6c6c7a,
+const TERRAIN_COLORS: Record<string, string> = {
+  grass: '#4d7a3a',
+  road: '#3a3a44',
+  water: '#2a55a8',
+  sand: '#cdb87a',
+  plaza: '#7a7363',
+  sidewalk: '#6c6c7a',
 };
 
-const BUILDING_PALETTE: Record<string, { roof: number; wall: number; height: number }> = {
-  house: { roof: 0xb6614a, wall: 0xcfb18a, height: 24 },
-  apartment: { roof: 0x9a5a76, wall: 0xd9c2a3, height: 56 },
-  shop: { roof: 0xdba14a, wall: 0xe6d9b6, height: 28 },
-  factory: { roof: 0x4a4f5a, wall: 0x8d8d97, height: 44 },
-  farm: { roof: 0x6e4a2a, wall: 0xc6a36c, height: 18 },
-  bar: { roof: 0x5a3c66, wall: 0xb88fb1, height: 26 },
-  office: { roof: 0x3a3f5a, wall: 0xb8c1e0, height: 60 },
-  bank: { roof: 0x222a44, wall: 0xd4c8a4, height: 50 },
-  court: { roof: 0x5c5247, wall: 0xeae2cf, height: 46 },
-  jail: { roof: 0x2a2a2a, wall: 0x7a7670, height: 32 },
-  temple: { roof: 0xe0c266, wall: 0xeae0bd, height: 60 },
-  town_hall: { roof: 0xcab36a, wall: 0xeadcb0, height: 56 },
-  water_works: { roof: 0x355a7a, wall: 0xa0b8c8, height: 32 },
-  power_plant: { roof: 0x4a3a2a, wall: 0x988877, height: 40 },
+const BUILDING_PALETTE: Record<string, { roof: string; wall: string; height: number }> = {
+  house: { roof: '#b6614a', wall: '#cfb18a', height: 26 },
+  apartment: { roof: '#9a5a76', wall: '#d9c2a3', height: 56 },
+  shop: { roof: '#dba14a', wall: '#e6d9b6', height: 30 },
+  factory: { roof: '#4a4f5a', wall: '#8d8d97', height: 46 },
+  farm: { roof: '#6e4a2a', wall: '#c6a36c', height: 20 },
+  bar: { roof: '#5a3c66', wall: '#b88fb1', height: 28 },
+  office: { roof: '#3a3f5a', wall: '#b8c1e0', height: 64 },
+  bank: { roof: '#222a44', wall: '#d4c8a4', height: 52 },
+  court: { roof: '#5c5247', wall: '#eae2cf', height: 48 },
+  jail: { roof: '#2a2a2a', wall: '#7a7670', height: 34 },
+  temple: { roof: '#e0c266', wall: '#eae0bd', height: 62 },
+  town_hall: { roof: '#cab36a', wall: '#eadcb0', height: 58 },
+  water_works: { roof: '#355a7a', wall: '#a0b8c8', height: 34 },
+  power_plant: { roof: '#4a3a2a', wall: '#988877', height: 42 },
 };
 
-const AGENT_STATE_COLOR: Record<string, number> = {
-  idle: 0xa3e0b6,
-  walking: 0x7ee787,
-  working: 0xf5d265,
-  sleeping: 0x7ea3e0,
-  eating: 0xe07e9c,
-  speaking: 0xe0c87e,
-  jailed: 0xf85149,
-  dead: 0x555555,
+const AGENT_STATE_COLOR: Record<string, string> = {
+  idle: '#a3e0b6',
+  walking: '#7ee787',
+  working: '#f5d265',
+  sleeping: '#7ea3e0',
+  eating: '#e07e9c',
+  speaking: '#e0c87e',
+  jailed: '#f85149',
+  dead: '#555555',
 };
 
-interface Props {
-  className?: string;
-}
+interface Camera { x: number; y: number; scale: number }
 
-export default function CityCanvas({ className }: Props) {
+export default function CityCanvas({ className }: { className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const appRef = useRef<unknown | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Local positions cached for smooth interpolation — keyed by agent id.
+  const localPos = useRef<Map<string, { x: number; y: number }>>(new Map());
+  // Bumps a render so screen stays painted even when nothing moves.
+  const [, setTick] = useState(0);
+  void setTick;
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const container = containerRef.current;
+    const canvas = canvasRef.current;
+    if (!container || !canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { setError('2D context unavailable'); return; }
+
     let cancelled = false;
+    let rafId = 0;
 
-    const boot = async () => {
-      const PIXI = await import('pixi.js');
-      if (cancelled || !containerRef.current) return;
+    // ---------- terrain cache ----------
+    const W = useWorld.getState().width || 96;
+    const H = useWorld.getState().height || 96;
+    const terrain = generateTerrain(W, H, 42);
 
-      const app = new PIXI.Application();
-      await app.init({
-        background: '#0a0d14',
-        resizeTo: containerRef.current,
-        antialias: true,
-        autoDensity: true,
-        resolution: Math.min(2, window.devicePixelRatio || 1),
-      });
-      containerRef.current.appendChild(app.canvas);
-      appRef.current = app;
-
-      // world root for pan/zoom
-      const world = new PIXI.Container();
-      app.stage.addChild(world);
-
-      const terrainLayer = new PIXI.Container();
-      const roadLayer = new PIXI.Container();
-      const buildingLayer = new PIXI.Container();
-      const agentLayer = new PIXI.Container();
-      const overlayLayer = new PIXI.Container();
-      world.addChild(terrainLayer, roadLayer, buildingLayer, agentLayer, overlayLayer);
-
-      // initial center
-      const center = () => {
-        const c = tileToWorld(48, 48);
-        world.x = app.renderer.width / 2 - c.x * world.scale.x;
-        world.y = app.renderer.height / 2 - c.y * world.scale.y;
-      };
-      world.scale.set(0.85);
-      center();
-
-      // ----- terrain ----------------------------------------------------
-      const state = useWorld.getState();
-      const W = state.width || 96;
-      const H = state.height || 96;
-      const terrain = generateTerrain(W, H, 42);
-      drawTerrain(PIXI, terrainLayer, terrain, W, H);
-
-      // ----- buildings --------------------------------------------------
-      const buildingSprites = new Map<string, { container: any; height: number }>();
-      function syncBuildings() {
-        const buildings = useWorld.getState().buildings;
-        const seen = new Set<string>();
-        for (const b of buildings) {
-          seen.add(b.id);
-          if (buildingSprites.has(b.id)) continue;
-          const container = drawBuilding(PIXI, b);
-          container.eventMode = 'static';
-          container.cursor = 'pointer';
-          (container as any).buildingId = b.id;
-          container.on('pointertap', () => useWorld.getState().selectBuilding(b.id));
-          buildingLayer.addChild(container);
-          buildingSprites.set(b.id, { container, height: BUILDING_PALETTE[b.kind]?.height ?? 30 });
-        }
-        for (const id of Array.from(buildingSprites.keys())) {
-          if (!seen.has(id)) {
-            const s = buildingSprites.get(id);
-            if (s) buildingLayer.removeChild(s.container);
-            buildingSprites.delete(id);
-          }
-        }
-        sortIso(buildingLayer);
-      }
-
-      // ----- agents -----------------------------------------------------
-      interface AgentSprite {
-        container: any;
-        body: any;
-        nameLabel: any;
-        bubble: any;
-        floater: any;
-      }
-      const agentSprites = new Map<string, AgentSprite>();
-
-      function makeAgentSprite(id: string, name: string) {
-        const c = new PIXI.Container();
-        c.eventMode = 'static';
-        c.cursor = 'pointer';
-        const body = new PIXI.Graphics();
-        c.addChild(body);
-        const nameLabel = new PIXI.Text({
-          text: name,
-          style: { fontFamily: 'Inter', fontSize: 10, fill: 0xffffff, stroke: { color: 0x000000, width: 3 } },
-        });
-        nameLabel.anchor.set(0.5, 1);
-        nameLabel.position.set(0, -16);
-        nameLabel.visible = false;
-        c.addChild(nameLabel);
-        const bubble = new PIXI.Text({
-          text: '',
-          style: {
-            fontFamily: 'Inter',
-            fontSize: 11,
-            fill: 0x111111,
-            wordWrap: true,
-            wordWrapWidth: 180,
-            align: 'left',
-          },
-        });
-        bubble.anchor.set(0.5, 1);
-        bubble.position.set(0, -30);
-        bubble.visible = false;
-        c.addChild(bubble);
-        const floater = new PIXI.Text({
-          text: '',
-          style: {
-            fontFamily: 'Inter',
-            fontSize: 12,
-            fontWeight: '600',
-            fill: 0x7ee787,
-            stroke: { color: 0x000000, width: 3 },
-          },
-        });
-        floater.anchor.set(0.5, 1);
-        floater.position.set(0, -22);
-        floater.visible = false;
-        c.addChild(floater);
-        c.on('pointerover', () => { nameLabel.visible = true; });
-        c.on('pointerout', () => { nameLabel.visible = false; });
-        c.on('pointertap', () => useWorld.getState().selectAgent(id));
-        return { container: c, body, nameLabel, bubble, floater };
-      }
-
-      function syncAgents() {
-        const agents = useWorld.getState().agents;
-        const seen = new Set<string>();
-        for (const [id, a] of agents) {
-          seen.add(id);
-          let s = agentSprites.get(id);
-          if (!s) {
-            s = makeAgentSprite(id, a.name);
-            agentLayer.addChild(s.container);
-            agentSprites.set(id, s);
-          }
-        }
-        for (const id of Array.from(agentSprites.keys())) {
-          if (!seen.has(id)) {
-            const s = agentSprites.get(id);
-            if (s) agentLayer.removeChild(s.container);
-            agentSprites.delete(id);
-          }
-        }
-      }
-
-      // ----- pan / zoom -------------------------------------------------
-      let dragging = false;
-      let lastX = 0;
-      let lastY = 0;
-      const canvas = app.canvas;
-      canvas.addEventListener('pointerdown', (ev: PointerEvent) => {
-        dragging = true;
-        lastX = ev.clientX;
-        lastY = ev.clientY;
-        canvas.setPointerCapture(ev.pointerId);
-      });
-      canvas.addEventListener('pointermove', (ev: PointerEvent) => {
-        if (!dragging) return;
-        world.x += ev.clientX - lastX;
-        world.y += ev.clientY - lastY;
-        lastX = ev.clientX;
-        lastY = ev.clientY;
-        useWorld.setState({ followAgentId: null });
-      });
-      canvas.addEventListener('pointerup', () => {
-        dragging = false;
-      });
-      canvas.addEventListener('wheel', (ev: WheelEvent) => {
-        ev.preventDefault();
-        const delta = ev.deltaY < 0 ? 1.1 : 0.9;
-        const ns = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, world.scale.x * delta));
-        const rect = canvas.getBoundingClientRect();
-        const mx = ev.clientX - rect.left;
-        const my = ev.clientY - rect.top;
-        // zoom toward cursor
-        const wx = (mx - world.x) / world.scale.x;
-        const wy = (my - world.y) / world.scale.y;
-        world.scale.set(ns);
-        world.x = mx - wx * ns;
-        world.y = my - wy * ns;
-      }, { passive: false });
-
-      // ----- keyboard ---------------------------------------------------
-      const keys = new Set<string>();
-      window.addEventListener('keydown', (ev) => keys.add(ev.key.toLowerCase()));
-      window.addEventListener('keyup', (ev) => keys.delete(ev.key.toLowerCase()));
-
-      // ----- main loop --------------------------------------------------
-      const SPEED_TILES_PER_SEC = 0.6;
-      let lastFrame = performance.now();
-
-      app.ticker.add(() => {
-        const now = performance.now();
-        const dt = (now - lastFrame) / 1000;
-        lastFrame = now;
-
-        // pan with WASD
-        const PAN_SPEED = 600 * dt;
-        if (keys.has('w') || keys.has('arrowup')) world.y += PAN_SPEED;
-        if (keys.has('s') || keys.has('arrowdown')) world.y -= PAN_SPEED;
-        if (keys.has('a') || keys.has('arrowleft')) world.x += PAN_SPEED;
-        if (keys.has('d') || keys.has('arrowright')) world.x -= PAN_SPEED;
-
-        syncBuildings();
-        syncAgents();
-
-        // interpolate agents
-        const agents = useWorld.getState().agents;
-        const nowMs = Date.now();
-        const moveDelta = SPEED_TILES_PER_SEC * dt;
-        for (const [id, a] of agents) {
-          const s = agentSprites.get(id);
-          if (!s) continue;
-          // step pos toward target locally for smoothness
-          const dx = a.target_x - a.pos_x;
-          const dy = a.target_y - a.pos_y;
-          const dist = Math.hypot(dx, dy);
-          if (dist > 0.0001) {
-            const stepLen = Math.min(dist, moveDelta);
-            a.pos_x += (dx / dist) * stepLen;
-            a.pos_y += (dy / dist) * stepLen;
-          }
-          const p = tileToWorld(a.pos_x, a.pos_y);
-          s.container.position.set(p.x, p.y);
-          drawAgentBody(PIXI, s.body, a.state, a.status);
-
-          // bubble
-          if (a.lastBubble && a.lastBubble.expires > nowMs) {
-            if (s.bubble.text !== a.lastBubble.text) s.bubble.text = a.lastBubble.text;
-            s.bubble.visible = true;
-          } else {
-            s.bubble.visible = false;
-          }
-          // floater
-          if (a.lastFloater && a.lastFloater.expires > nowMs) {
-            if (s.floater.text !== a.lastFloater.text) s.floater.text = a.lastFloater.text;
-            (s.floater.style as any).fill = a.lastFloater.color;
-            const remaining = (a.lastFloater.expires - nowMs) / 1800;
-            s.floater.alpha = remaining;
-            s.floater.position.y = -22 - (1 - remaining) * 16;
-            s.floater.visible = true;
-          } else {
-            s.floater.visible = false;
-          }
-        }
-
-        sortIso(agentLayer);
-
-        // follow camera
-        const followId = useWorld.getState().followAgentId;
-        if (followId) {
-          const a = useWorld.getState().agents.get(followId);
-          if (a) {
-            const p = tileToWorld(a.pos_x, a.pos_y);
-            world.x = app.renderer.width / 2 - p.x * world.scale.x;
-            world.y = app.renderer.height / 2 - p.y * world.scale.y;
-          }
-        }
-
-        // day/night tint applied via stage filter (cheap)
-        const hour = (Date.now() / 1000 / 60) % 24; // 1 min == 1 sim hour
-        const isNight = hour < 6 || hour > 20;
-        const dimAmount = isNight ? 0.55 : 1.0;
-        // overlay rectangle as cheap tint
-        if (!(overlayLayer as any)._tint) {
-          const r = new PIXI.Graphics();
-          (overlayLayer as any)._tint = r;
-          overlayLayer.addChild(r);
-        }
-        const tintG: any = (overlayLayer as any)._tint;
-        tintG.clear();
-        if (isNight) {
-          tintG.rect(-5000, -5000, 10000, 10000).fill({ color: 0x0a1230, alpha: 0.32 });
-        }
-        void dimAmount;
-      });
+    // ---------- camera ----------
+    const cam: Camera = { x: 0, y: 0, scale: 0.85 };
+    const recenter = () => {
+      const c = tileToWorld(48, 48);
+      cam.x = canvas.width / (window.devicePixelRatio || 1) / 2 - c.x * cam.scale;
+      cam.y = canvas.height / (window.devicePixelRatio || 1) / 2 - c.y * cam.scale;
     };
 
-    boot();
-    return () => {
-      cancelled = true;
-      const app: any = appRef.current;
-      if (app) {
-        try {
-          app.destroy(true, { children: true });
-        } catch {
-          /* noop */
+    const fitCanvas = () => {
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const cssW = container.clientWidth;
+      const cssH = container.clientHeight;
+      canvas.width = Math.floor(cssW * dpr);
+      canvas.height = Math.floor(cssH * dpr);
+      canvas.style.width = `${cssW}px`;
+      canvas.style.height = `${cssH}px`;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+
+    fitCanvas();
+    recenter();
+
+    // ---------- input ----------
+    const keys = new Set<string>();
+    const onKeyDown = (ev: KeyboardEvent) => keys.add(ev.key.toLowerCase());
+    const onKeyUp = (ev: KeyboardEvent) => keys.delete(ev.key.toLowerCase());
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+
+    let dragging = false;
+    let lastX = 0;
+    let lastY = 0;
+    const onPointerDown = (ev: PointerEvent) => {
+      dragging = true;
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      canvas.setPointerCapture(ev.pointerId);
+    };
+    const onPointerMove = (ev: PointerEvent) => {
+      if (!dragging) return;
+      cam.x += ev.clientX - lastX;
+      cam.y += ev.clientY - lastY;
+      lastX = ev.clientX;
+      lastY = ev.clientY;
+      useWorld.setState({ followAgentId: null });
+    };
+    const onPointerUp = () => { dragging = false; };
+    const onWheel = (ev: WheelEvent) => {
+      ev.preventDefault();
+      const delta = ev.deltaY < 0 ? 1.1 : 0.9;
+      const ns = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, cam.scale * delta));
+      const rect = canvas.getBoundingClientRect();
+      const mx = ev.clientX - rect.left;
+      const my = ev.clientY - rect.top;
+      const wx = (mx - cam.x) / cam.scale;
+      const wy = (my - cam.y) / cam.scale;
+      cam.scale = ns;
+      cam.x = mx - wx * ns;
+      cam.y = my - wy * ns;
+    };
+
+    // click → select nearest agent (within tolerance) else nearest building
+    const onClick = (ev: MouseEvent) => {
+      const rect = canvas.getBoundingClientRect();
+      const mx = ev.clientX - rect.left;
+      const my = ev.clientY - rect.top;
+      // world coords
+      const wx = (mx - cam.x) / cam.scale;
+      const wy = (my - cam.y) / cam.scale;
+      // agents
+      const agents = useWorld.getState().agents;
+      let bestAgent: { id: string; d: number } | null = null;
+      for (const [id, a] of agents) {
+        const lp = localPos.current.get(id) ?? { x: a.pos_x, y: a.pos_y };
+        const p = tileToWorld(lp.x, lp.y);
+        const d = Math.hypot(p.x - wx, p.y - wy);
+        if (d < 14 && (!bestAgent || d < bestAgent.d)) bestAgent = { id, d };
+      }
+      if (bestAgent) {
+        useWorld.getState().selectAgent(bestAgent.id);
+        return;
+      }
+      // buildings
+      const buildings = useWorld.getState().buildings;
+      let bestBuilding: { id: string; d: number } | null = null;
+      for (const b of buildings) {
+        const c = tileToWorld(b.tile_x + b.tile_w / 2, b.tile_y + b.tile_h / 2);
+        const r = Math.max(b.tile_w, b.tile_h) * Math.max(TILE_W, TILE_H);
+        const d = Math.hypot(c.x - wx, c.y - wy);
+        if (d < r && (!bestBuilding || d < bestBuilding.d)) bestBuilding = { id: b.id, d };
+      }
+      if (bestBuilding) useWorld.getState().selectBuilding(bestBuilding.id);
+    };
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    canvas.addEventListener('click', onClick);
+
+    const ro = new ResizeObserver(() => fitCanvas());
+    ro.observe(container);
+
+    // ---------- main loop ----------
+    const SPEED = 0.6;
+    let prev = performance.now();
+
+    const frame = () => {
+      if (cancelled) return;
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - prev) / 1000);
+      prev = now;
+
+      // pan
+      const PAN = 700 * dt;
+      if (keys.has('w') || keys.has('arrowup')) cam.y += PAN;
+      if (keys.has('s') || keys.has('arrowdown')) cam.y -= PAN;
+      if (keys.has('a') || keys.has('arrowleft')) cam.x += PAN;
+      if (keys.has('d') || keys.has('arrowright')) cam.x -= PAN;
+
+      // sync local positions toward target
+      const agents = useWorld.getState().agents;
+      const moveDelta = SPEED * dt;
+      for (const [id, a] of agents) {
+        let lp = localPos.current.get(id);
+        if (!lp) {
+          lp = { x: a.pos_x, y: a.pos_y };
+          localPos.current.set(id, lp);
+        }
+        const dx = a.target_x - lp.x;
+        const dy = a.target_y - lp.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > 0.0001) {
+          const step = Math.min(dist, moveDelta);
+          lp.x += (dx / dist) * step;
+          lp.y += (dy / dist) * step;
         }
       }
-      appRef.current = null;
+      // drop stale
+      for (const id of Array.from(localPos.current.keys())) {
+        if (!agents.has(id)) localPos.current.delete(id);
+      }
+
+      // follow camera
+      const followId = useWorld.getState().followAgentId;
+      if (followId) {
+        const lp = localPos.current.get(followId);
+        if (lp) {
+          const p = tileToWorld(lp.x, lp.y);
+          const dpr = 1; // already accounted for in fitCanvas transform
+          cam.x = canvas.clientWidth / (2 * dpr) - p.x * cam.scale;
+          cam.y = canvas.clientHeight / (2 * dpr) - p.y * cam.scale;
+        }
+      }
+
+      // ---------- draw ----------
+      const cssW = canvas.clientWidth;
+      const cssH = canvas.clientHeight;
+      ctx.save();
+      ctx.fillStyle = '#0a0d14';
+      ctx.fillRect(0, 0, cssW, cssH);
+
+      ctx.translate(cam.x, cam.y);
+      ctx.scale(cam.scale, cam.scale);
+
+      // viewport bounds in world coords (cull)
+      const vx0 = -cam.x / cam.scale;
+      const vy0 = -cam.y / cam.scale;
+      const vx1 = vx0 + cssW / cam.scale;
+      const vy1 = vy0 + cssH / cam.scale;
+      const PAD = 80;
+
+      // terrain
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const p = tileToWorld(x, y);
+          if (p.x < vx0 - PAD || p.x > vx1 + PAD || p.y < vy0 - PAD || p.y > vy1 + PAD) continue;
+          const kind = terrain[y]?.[x] ?? 'grass';
+          drawIsoTile(ctx, p.x, p.y, TERRAIN_COLORS[kind] ?? '#444');
+        }
+      }
+
+      // buildings + agents — depth-sort together by their anchor y
+      const buildings = useWorld.getState().buildings;
+      type DrawItem =
+        | { kind: 'b'; depth: number; data: typeof buildings[number] }
+        | { kind: 'a'; depth: number; id: string; lp: { x: number; y: number }; agent: any };
+      const items: DrawItem[] = [];
+      for (const b of buildings) {
+        const c = tileToWorld(b.tile_x + b.tile_w / 2, b.tile_y + b.tile_h / 2);
+        if (c.x < vx0 - 200 || c.x > vx1 + 200 || c.y < vy0 - 200 || c.y > vy1 + 200) continue;
+        items.push({ kind: 'b', depth: c.y, data: b });
+      }
+      for (const [id, a] of agents) {
+        const lp = localPos.current.get(id);
+        if (!lp) continue;
+        const p = tileToWorld(lp.x, lp.y);
+        if (p.x < vx0 - 80 || p.x > vx1 + 80 || p.y < vy0 - 80 || p.y > vy1 + 80) continue;
+        items.push({ kind: 'a', depth: p.y, id, lp, agent: a });
+      }
+      items.sort((a, b) => a.depth - b.depth);
+
+      for (const it of items) {
+        if (it.kind === 'b') drawBuilding(ctx, it.data);
+        else drawAgent(ctx, it.lp, it.agent);
+      }
+
+      // bubbles / floaters above everything
+      const nowMs = Date.now();
+      for (const [id, a] of agents) {
+        const lp = localPos.current.get(id);
+        if (!lp) continue;
+        const p = tileToWorld(lp.x, lp.y);
+        if (p.x < vx0 - 200 || p.x > vx1 + 200) continue;
+        if (a.lastBubble && a.lastBubble.expires > nowMs) {
+          drawBubble(ctx, p.x, p.y - 28, a.lastBubble.text);
+        }
+        if (a.lastFloater && a.lastFloater.expires > nowMs) {
+          const rem = (a.lastFloater.expires - nowMs) / 1800;
+          drawFloater(ctx, p.x, p.y - 22 - (1 - rem) * 18, a.lastFloater.text, a.lastFloater.color, rem);
+        }
+      }
+
+      ctx.restore();
+
+      // selected outline overlay (screen space)
+      const selBId = useWorld.getState().selectedBuildingId;
+      if (selBId) {
+        const b = buildings.find((x) => x.id === selBId);
+        if (b) drawSelectionRing(ctx, cam, tileToWorld(b.tile_x + b.tile_w / 2, b.tile_y + b.tile_h / 2));
+      }
+      const selAId = useWorld.getState().selectedAgentId;
+      if (selAId) {
+        const lp = localPos.current.get(selAId);
+        if (lp) drawSelectionRing(ctx, cam, tileToWorld(lp.x, lp.y), 18);
+      }
+
+      rafId = requestAnimationFrame(frame);
+    };
+    rafId = requestAnimationFrame(frame);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(rafId);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('wheel', onWheel as any);
+      canvas.removeEventListener('click', onClick);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      ro.disconnect();
     };
   }, []);
 
-  return <div ref={containerRef} className={className ?? 'absolute inset-0'} />;
+  return (
+    <div ref={containerRef} className={className ?? 'absolute inset-0'}>
+      <canvas ref={canvasRef} className="absolute inset-0 block" />
+      {error && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 glass rounded-lg px-4 py-3 text-xs text-rose-300 max-w-md">
+          Renderer error: {error}
+        </div>
+      )}
+    </div>
+  );
 }
 
-function drawTerrain(PIXI: any, layer: any, terrain: string[][], W: number, H: number) {
-  // batch into a single Graphics for perf
-  const g = new PIXI.Graphics();
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      const kind = terrain[y]![x];
-      const color = TERRAIN_COLORS[kind] ?? 0x333333;
-      const p = tileToWorld(x, y);
-      g.poly([
-        p.x, p.y - TILE_H / 2,
-        p.x + TILE_W / 2, p.y,
-        p.x, p.y + TILE_H / 2,
-        p.x - TILE_W / 2, p.y,
-      ]).fill(color);
-    }
-  }
-  // subtle water shimmer via overlay rects (cheap)
-  layer.addChild(g);
+// ---------- drawing helpers ----------
+
+function drawIsoTile(ctx: CanvasRenderingContext2D, x: number, y: number, color: string) {
+  ctx.beginPath();
+  ctx.moveTo(x, y - TILE_H / 2);
+  ctx.lineTo(x + TILE_W / 2, y);
+  ctx.lineTo(x, y + TILE_H / 2);
+  ctx.lineTo(x - TILE_W / 2, y);
+  ctx.closePath();
+  ctx.fillStyle = color;
+  ctx.fill();
 }
 
-function drawBuilding(PIXI: any, b: any): any {
+function drawBuilding(
+  ctx: CanvasRenderingContext2D,
+  b: { kind: string; name: string; tile_x: number; tile_y: number; tile_w: number; tile_h: number },
+) {
   const palette = BUILDING_PALETTE[b.kind] ?? BUILDING_PALETTE.house!;
-  const c = new PIXI.Container();
-  const w = b.tile_w;
-  const h = b.tile_h;
   const hp = palette.height;
+  const tl = tileToWorld(b.tile_x, b.tile_y);
+  const tr = tileToWorld(b.tile_x + b.tile_w, b.tile_y);
+  const br = tileToWorld(b.tile_x + b.tile_w, b.tile_y + b.tile_h);
+  const bl = tileToWorld(b.tile_x, b.tile_y + b.tile_h);
 
-  // base footprint - dark base
-  const base = new PIXI.Graphics();
-  const corners = footprintCorners(b.tile_x, b.tile_y, w, h);
-  base.poly(corners.flatMap((p) => [p.x, p.y])).fill({ color: 0x0a0a0e, alpha: 0.4 });
-  c.addChild(base);
+  // base shadow
+  ctx.beginPath();
+  ctx.moveTo(tl.x, tl.y);
+  ctx.lineTo(tr.x, tr.y);
+  ctx.lineTo(br.x, br.y);
+  ctx.lineTo(bl.x, bl.y);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(0,0,0,0.4)';
+  ctx.fill();
 
-  // walls (4 visible sides — front-right and back-right shown in iso)
-  const walls = new PIXI.Graphics();
   // right wall
-  const tl = corners[0]!;
-  const tr = corners[1]!;
-  const br = corners[2]!;
-  const bl = corners[3]!;
-  walls
-    .poly([tr.x, tr.y, tr.x, tr.y - hp, br.x, br.y - hp, br.x, br.y])
-    .fill(palette.wall);
-  walls
-    .poly([br.x, br.y, br.x, br.y - hp, bl.x, bl.y - hp, bl.x, bl.y])
-    .fill(darken(palette.wall, 0.78));
-  c.addChild(walls);
+  ctx.beginPath();
+  ctx.moveTo(tr.x, tr.y);
+  ctx.lineTo(tr.x, tr.y - hp);
+  ctx.lineTo(br.x, br.y - hp);
+  ctx.lineTo(br.x, br.y);
+  ctx.closePath();
+  ctx.fillStyle = palette.wall;
+  ctx.fill();
+
+  // front (left) wall — darker
+  ctx.beginPath();
+  ctx.moveTo(br.x, br.y);
+  ctx.lineTo(br.x, br.y - hp);
+  ctx.lineTo(bl.x, bl.y - hp);
+  ctx.lineTo(bl.x, bl.y);
+  ctx.closePath();
+  ctx.fillStyle = darken(palette.wall, 0.78);
+  ctx.fill();
 
   // roof
-  const roof = new PIXI.Graphics();
-  roof
-    .poly([
-      tl.x, tl.y - hp,
-      tr.x, tr.y - hp,
-      br.x, br.y - hp,
-      bl.x, bl.y - hp,
-    ])
-    .fill(palette.roof);
-  c.addChild(roof);
+  ctx.beginPath();
+  ctx.moveTo(tl.x, tl.y - hp);
+  ctx.lineTo(tr.x, tr.y - hp);
+  ctx.lineTo(br.x, br.y - hp);
+  ctx.lineTo(bl.x, bl.y - hp);
+  ctx.closePath();
+  ctx.fillStyle = palette.roof;
+  ctx.fill();
+  ctx.strokeStyle = darken(palette.roof, 0.7);
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
 
   // windows on right wall
-  const windows = new PIXI.Graphics();
-  const cols = Math.max(1, Math.floor(hp / 14));
-  const rows = Math.max(1, Math.floor(Math.abs(tr.x - br.x) / 16) || 1);
-  void rows;
-  for (let row = 1; row <= cols; row++) {
-    const yOff = (row * hp) / (cols + 1);
-    windows
-      .rect(tr.x + 4, tr.y - yOff - 4, Math.max(2, (br.x - tr.x) - 8), 6)
-      .fill({ color: 0xfff4b8, alpha: 0.55 });
+  const rows = Math.max(1, Math.floor(hp / 16));
+  const wallW = br.x - tr.x;
+  ctx.fillStyle = 'rgba(255,244,184,0.55)';
+  for (let r = 1; r <= rows; r++) {
+    const yOff = (r * hp) / (rows + 1);
+    ctx.fillRect(tr.x + 4, tr.y - yOff - 4, Math.max(2, wallW - 8), 6);
   }
-  c.addChild(windows);
 
-  // depth sort hint — anchor to building center
-  const anchor = tileToWorld(b.tile_x + w / 2, b.tile_y + h / 2);
-  c.position.set(0, 0);
-  (c as any).isoDepth = anchor.y;
-
-  // name label hovers? small label below
-  const label = new PIXI.Text({
-    text: b.name,
-    style: { fontFamily: 'Inter', fontSize: 9, fill: 0xffffff, stroke: { color: 0x000000, width: 2 } },
-  });
-  label.anchor.set(0.5, 0);
-  label.position.set(anchor.x, br.y + 4);
-  label.alpha = 0.7;
-  c.addChild(label);
-
-  return c;
+  // label
+  const anchor = tileToWorld(b.tile_x + b.tile_w / 2, b.tile_y + b.tile_h / 2);
+  ctx.font = '9px Inter, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillText(b.name, anchor.x + 1, br.y + 5);
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.fillText(b.name, anchor.x, br.y + 4);
 }
 
-function footprintCorners(tx: number, ty: number, w: number, h: number) {
-  return [
-    tileToWorld(tx, ty),
-    tileToWorld(tx + w, ty),
-    tileToWorld(tx + w, ty + h),
-    tileToWorld(tx, ty + h),
-  ];
-}
-
-function darken(hex: number, factor: number): number {
-  const r = Math.floor(((hex >> 16) & 0xff) * factor);
-  const g = Math.floor(((hex >> 8) & 0xff) * factor);
-  const b = Math.floor((hex & 0xff) * factor);
-  return (r << 16) | (g << 8) | b;
-}
-
-function drawAgentBody(_PIXI: any, g: any, state: string, status: string) {
-  g.clear();
-  const color = status === 'dead' ? 0x555555 : AGENT_STATE_COLOR[state] ?? 0xffffff;
+function drawAgent(
+  ctx: CanvasRenderingContext2D,
+  lp: { x: number; y: number },
+  a: { state: string; status: string },
+) {
+  const p = tileToWorld(lp.x, lp.y);
+  const color = a.status === 'dead' ? '#555555' : AGENT_STATE_COLOR[a.state] ?? '#fff';
   // shadow
-  g.ellipse(0, 4, 7, 3).fill({ color: 0x000000, alpha: 0.4 });
+  ctx.beginPath();
+  ctx.ellipse(p.x, p.y + 4, 7, 3, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fill();
   // body
-  g.circle(0, -4, 5).fill(color).stroke({ color: 0x111111, width: 1 });
+  ctx.beginPath();
+  ctx.arc(p.x, p.y - 4, 5, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.fill();
+  ctx.strokeStyle = '#111';
+  ctx.lineWidth = 1;
+  ctx.stroke();
   // head
-  g.circle(0, -10, 3).fill(0xf5d6a0).stroke({ color: 0x111111, width: 1 });
+  ctx.beginPath();
+  ctx.arc(p.x, p.y - 10, 3, 0, Math.PI * 2);
+  ctx.fillStyle = '#f5d6a0';
+  ctx.fill();
+  ctx.stroke();
 }
 
-function sortIso(layer: any) {
-  layer.children.sort((a: any, b: any) => {
-    const ay = a.isoDepth ?? a.y;
-    const by = b.isoDepth ?? b.y;
-    return ay - by;
-  });
+function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, text: string) {
+  ctx.font = '11px Inter, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  const w = Math.min(220, ctx.measureText(text).width + 14);
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  roundRect(ctx, x - w / 2, y - 18, w, 16, 4);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillText(text, x, y - 6);
+}
+
+function drawFloater(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  text: string,
+  color: string,
+  alpha: number,
+) {
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.font = '600 12px Inter, system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+function drawSelectionRing(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  worldPt: { x: number; y: number },
+  radius = 22,
+) {
+  const sx = cam.x + worldPt.x * cam.scale;
+  const sy = cam.y + worldPt.y * cam.scale;
+  ctx.beginPath();
+  ctx.arc(sx, sy, radius, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(126,231,135,0.9)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function darken(hex: string, f: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1]!, 16);
+  const r = Math.floor(((n >> 16) & 0xff) * f);
+  const g = Math.floor(((n >> 8) & 0xff) * f);
+  const b = Math.floor((n & 0xff) * f);
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }

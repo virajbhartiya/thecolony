@@ -1,5 +1,4 @@
 'use client';
-import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { fetchSnapshot } from '../lib/api';
 import { mergeSnapshotAgents, useWorld } from '../lib/store';
@@ -8,8 +7,7 @@ import HUD from '../components/HUD';
 import EventTicker from '../components/EventTicker';
 import AgentDrawer from '../components/AgentDrawer';
 import BuildingDrawer from '../components/BuildingDrawer';
-
-const CityCanvas = dynamic(() => import('../components/CityCanvas'), { ssr: false });
+import CityCanvas from '../components/CityCanvas';
 
 export default function Home() {
   const loadSnapshot = useWorld((s) => s.loadSnapshot);

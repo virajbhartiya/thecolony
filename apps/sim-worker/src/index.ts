@@ -5,12 +5,14 @@ import { tickDueAgents } from './agent-tick';
 import { stepMovement } from './movement';
 import { decayNeedsAll, sweepDeaths } from './needs';
 import { applyPayroll, collectRent, applyDailyProduction } from './economy';
+import { spawnMigrantsIfNeeded } from './migrants';
 import { closePublisher } from './publisher';
 
 const TICK_MS = env().WORLD_TICK_MS;
 const MOVEMENT_MS = 250;
-const NEEDS_DECAY_EVERY_TICKS = 6; // every 6s with 1s tick
-const DAILY_EVERY_TICKS = 60 * 24; // every 24 min wall == one sim day at 1x
+const NEEDS_DECAY_EVERY_TICKS = 6; // every 6s
+// Demo cadence: dailies fire every 60s real time so GDP/payroll/rent visibly move.
+const DAILY_EVERY_TICKS = 60;
 
 let stopping = false;
 
@@ -39,10 +41,11 @@ async function main() {
         await sweepDeaths();
       }
       if (tickCount % DAILY_EVERY_TICKS === 0) {
-        log.info('daily: production + payroll + rent');
+        log.info('daily: production + payroll + rent + migrants');
         await applyDailyProduction();
         await applyPayroll();
         await collectRent();
+        await spawnMigrantsIfNeeded();
       }
     } catch (e) {
       log.error({ err: (e as Error).message }, 'tick error');
