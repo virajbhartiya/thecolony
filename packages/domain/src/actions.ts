@@ -45,6 +45,17 @@ export const ActionSchema = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('assault'), target_agent_id: z.string().uuid() }),
   z.object({
+    kind: z.literal('fraud'),
+    target_agent_id: z.string().uuid(),
+    amount_cents: z.number().int().positive(),
+  }),
+  z.object({
+    kind: z.literal('breach'),
+    counterparty_id: z.string().uuid(),
+    amount_cents: z.number().int().positive(),
+    terms: z.string().max(500).optional(),
+  }),
+  z.object({
     kind: z.literal('accuse'),
     target_agent_id: z.string().uuid(),
     charge: z.string(),

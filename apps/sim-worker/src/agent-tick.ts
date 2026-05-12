@@ -7,6 +7,7 @@ import { writeEvent } from './event-writer';
 import { log } from './log';
 import { shareAsset, tickerForCompany } from './market';
 import { roleForIndustry, wageForRole } from './workforce';
+import { accuseAgent, createIncident } from './justice';
 
 const TICK_INTERVAL_MS = 60 * 1000; // 60s real seconds between decisions
 
@@ -16,19 +17,35 @@ interface BuildingRow {
   name: string;
   tile_x: number;
   tile_y: number;
+  tile_w?: number;
+  tile_h?: number;
 }
 
 export async function tickDueAgents(now: Date, maxAgents = 6): Promise<number> {
   const rows = await db
     .select()
     .from(schema.agent)
-    .where(and(eq(schema.agent.status, 'alive'), lte(schema.agent.next_decision_at, now), ne(schema.agent.state, 'walking')))
+    .where(and(sql`${schema.agent.status} IN ('alive', 'jailed')`, lte(schema.agent.next_decision_at, now), ne(schema.agent.state, 'walking')))
     .orderBy(schema.agent.next_decision_at)
     .limit(maxAgents);
 
   let processed = 0;
   for (const row of rows) {
     try {
+      if (row.status === 'jailed') {
+        await db
+          .update(schema.agent)
+          .set({ state: 'jailed', next_decision_at: new Date(Date.now() + TICK_INTERVAL_MS), updated_at: new Date() })
+          .where(eq(schema.agent.id, row.id));
+        await writeEvent({
+          kind: 'agent_reflected',
+          actor_ids: [row.id],
+          importance: 1,
+          payload: { context: 'jailed' },
+        });
+        processed++;
+        continue;
+      }
       await tickOne(row as unknown as Agent);
       processed++;
     } catch (e) {
@@ -675,21 +692,13 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
         amount_cents: loot,
         reason: 'theft',
       });
-      const [inc] = await db
-        .insert(schema.incident)
-        .values({
-          kind: 'theft',
-          perp_id: agent.id,
-          victim_id: targetId,
-          severity: 2,
-          resolved: false,
-        })
-        .returning({ id: schema.incident.id });
-      await writeEvent({
-        kind: 'incident_theft',
-        actor_ids: [agent.id, targetId],
-        importance: 7,
-        payload: { amount_cents: loot, incident_id: inc!.id },
+      await createIncident({
+        kind: 'theft',
+        perp_id: agent.id,
+        victim_id: targetId,
+        severity: 2,
+        amount_cents: loot,
+        location_id: currentBuildingId(agent, allBuildings),
       });
       // mark relationship: victim's affinity toward perp tanks
       await db.execute(sql`
@@ -702,6 +711,92 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       `);
       return;
     }
+    case 'assault': {
+      const [target] = await db.select().from(schema.agent).where(eq(schema.agent.id, action.target_agent_id)).limit(1);
+      if (!target || target.status !== 'alive' || target.id === agent.id) return;
+      const severity = Math.max(2, Math.min(5, Math.round(2 + agent.traits.risk * 3 - agent.traits.empathy)));
+      await createIncident({
+        kind: 'assault',
+        perp_id: agent.id,
+        victim_id: target.id,
+        severity,
+        location_id: currentBuildingId(agent, allBuildings),
+      });
+      await db.execute(sql`
+        INSERT INTO ${schema.agent_relationship} (subj_id, obj_id, affinity, trust, tags)
+        VALUES (${target.id}, ${agent.id}, -70, -60, ARRAY['assaulted_by'])
+        ON CONFLICT (subj_id, obj_id) DO UPDATE
+          SET affinity = LEAST(100, GREATEST(-100, ${schema.agent_relationship.affinity} - 70)),
+              trust    = LEAST(100, GREATEST(-100, ${schema.agent_relationship.trust} - 60)),
+              tags     = ARRAY['assaulted_by']
+      `);
+      return;
+    }
+    case 'fraud': {
+      const [target] = await db.select().from(schema.agent).where(eq(schema.agent.id, action.target_agent_id)).limit(1);
+      if (!target || target.status !== 'alive' || target.id === agent.id) return;
+      const amount = Math.min(Number(target.balance_cents), Math.max(100, Math.min(action.amount_cents, 5000)));
+      if (amount <= 0) return;
+      await db
+        .update(schema.agent)
+        .set({ balance_cents: sql`${schema.agent.balance_cents} - ${amount}` })
+        .where(eq(schema.agent.id, target.id));
+      await db
+        .update(schema.agent)
+        .set({ balance_cents: sql`${schema.agent.balance_cents} + ${amount}` })
+        .where(eq(schema.agent.id, agent.id));
+      await db.insert(schema.ledger_entry).values({
+        debit_kind: 'agent',
+        debit_id: target.id,
+        credit_kind: 'agent',
+        credit_id: agent.id,
+        amount_cents: amount,
+        reason: 'fraud',
+      });
+      await createIncident({
+        kind: 'fraud',
+        perp_id: agent.id,
+        victim_id: target.id,
+        severity: amount >= 3000 ? 4 : 3,
+        amount_cents: amount,
+        location_id: currentBuildingId(agent, allBuildings),
+      });
+      await db.execute(sql`
+        INSERT INTO ${schema.agent_relationship} (subj_id, obj_id, affinity, trust, tags)
+        VALUES (${target.id}, ${agent.id}, -45, -70, ARRAY['defrauded_by'])
+        ON CONFLICT (subj_id, obj_id) DO UPDATE
+          SET affinity = LEAST(100, GREATEST(-100, ${schema.agent_relationship.affinity} - 45)),
+              trust    = LEAST(100, GREATEST(-100, ${schema.agent_relationship.trust} - 70)),
+              tags     = ARRAY['defrauded_by']
+      `);
+      return;
+    }
+    case 'breach': {
+      const [counterparty] = await db.select().from(schema.agent).where(eq(schema.agent.id, action.counterparty_id)).limit(1);
+      if (!counterparty || counterparty.status !== 'alive' || counterparty.id === agent.id) return;
+      await createIncident({
+        kind: 'breach',
+        perp_id: agent.id,
+        victim_id: counterparty.id,
+        severity: action.amount_cents >= 3000 ? 3 : 2,
+        amount_cents: Math.max(0, Math.min(action.amount_cents, 10_000)),
+        location_id: currentBuildingId(agent, allBuildings),
+      });
+      await db.execute(sql`
+        INSERT INTO ${schema.agent_relationship} (subj_id, obj_id, affinity, trust, tags)
+        VALUES (${counterparty.id}, ${agent.id}, -30, -40, ARRAY['contract_breached'])
+        ON CONFLICT (subj_id, obj_id) DO UPDATE
+          SET affinity = LEAST(100, GREATEST(-100, ${schema.agent_relationship.affinity} - 30)),
+              trust    = LEAST(100, GREATEST(-100, ${schema.agent_relationship.trust} - 40)),
+              tags     = ARRAY['contract_breached']
+      `);
+      return;
+    }
+    case 'accuse':
+      if (action.target_agent_id !== agent.id) {
+        await accuseAgent(agent.id, action.target_agent_id, action.charge);
+      }
+      return;
     default:
       // unimplemented v1 actions degrade to idle
       await db.update(schema.agent).set({ state: 'idle' }).where(eq(schema.agent.id, agent.id));
@@ -754,6 +849,17 @@ function workplaceKindsForIndustry(industry: string): string[] {
 
 function distanceToAgent(building: BuildingRow, agent: Agent): number {
   return Math.hypot(building.tile_x - agent.pos_x, building.tile_y - agent.pos_y);
+}
+
+function currentBuildingId(agent: Agent, allBuildings: BuildingRow[]): string | null {
+  const building = allBuildings.find(
+    (b) =>
+      agent.pos_x >= b.tile_x &&
+      agent.pos_x <= b.tile_x + (b.tile_w ?? 2) &&
+      agent.pos_y >= b.tile_y &&
+      agent.pos_y <= b.tile_y + (b.tile_h ?? 2),
+  );
+  return building?.id ?? null;
 }
 
 function wageForOccupation(occupation: string | null | undefined): number {

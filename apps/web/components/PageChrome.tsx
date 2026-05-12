@@ -7,6 +7,7 @@ const NAV = [
   ['/feed', 'Feed'],
   ['/news', 'News'],
   ['/leaderboards', 'Leaders'],
+  ['/companies', 'Companies'],
   ['/market', 'Market'],
   ['/crime', 'Crime'],
   ['/groups', 'Groups'],

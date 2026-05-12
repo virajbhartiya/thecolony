@@ -107,6 +107,7 @@ const HUD_LINKS = [
   ['/feed', 'Feed'],
   ['/news', 'News'],
   ['/leaderboards', 'Leaders'],
+  ['/companies', 'Companies'],
   ['/market', 'Market'],
   ['/crime', 'Crime'],
   ['/history', 'History'],

@@ -224,12 +224,12 @@ Goal: shareable. Every screen pulls its weight.
 
 ## M7 — Crime & justice
 
-- [ ] **M7-T01** Add `incident`, `legal_status` schemas. Build `steal`, `assault`, `fraud`, `breach` actions.
-- [ ] **M7-T02** Witness model: nearby agents at the time of crime get a `witnessed_X` event. Reporting probability = f(empathy, relationship to victim).
-- [ ] **M7-T03** Court job (BullMQ repeatable `court-session` daily): processes accusations vs. evidence; guilty → jail N sim-days + civil damages.
-- [ ] **M7-T04** Jail mechanic: jailed agents `status='jailed'`, their decision pipeline reduces to `idle | reflect` until release.
+- [x] **M7-T01** Add `incident`, `legal_status` schemas. Build `steal`, `assault`, `fraud`, `breach` actions.
+- [x] **M7-T02** Witness model: nearby agents at the time of crime get a `witnessed_X` event. Reporting probability = f(empathy, relationship to victim).
+- [x] **M7-T03** Court job (BullMQ repeatable `court-session` daily): processes accusations vs. evidence; guilty → jail N sim-days + civil damages.
+- [x] **M7-T04** Jail mechanic: jailed agents `status='jailed'`, their decision pipeline reduces to `idle | reflect` until release.
 - [ ] **M7-T05** Bounty: agents above 3 warrants are bountied; other agents may `accuse` and receive bounty if conviction follows.
-- [ ] **M7-T06** `/crime` page: heatmap of incidents, top criminals list, recent incident feed.
+- [x] **M7-T06** `/crime` page: heatmap of incidents, top criminals list, recent incident feed.
 
 **Milestone DoD:**
 - One full crime arc captured in logs: crime → witness → accusation → court → jail → release.
@@ -285,6 +285,7 @@ Goal: shareable. Every screen pulls its weight.
 
 - _(empty)_
 - [M6-T05] market cadence — implemented as a 15-tick worker cadence for the demo-speed world, preserving the same order-clearing behavior while the sim is running at accelerated local demo pace.
+- [M7-T03] court cadence — implemented as a 30-tick worker cadence for the demo-speed world instead of a daily BullMQ repeatable job; the same court resolution path runs while local sim time is intentionally accelerated.
 
 ---
 
@@ -292,4 +293,4 @@ Goal: shareable. Every screen pulls its weight.
 
 > If you deviate from `SPEC.md`, log the why here.
 
-- _(empty)_
+- [M7-T03] Court runs on the sim-worker heartbeat every 30 ticks in local demo mode instead of a daily BullMQ repeatable job, so crime arcs are visible during product testing.

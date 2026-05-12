@@ -146,6 +146,30 @@ export const useWorld = create<WorldState>((set, get) => ({
       case 'agent_fired':
         floater(e.actor_ids[0]!, 'fired', '#f85149');
         break;
+      case 'incident_theft':
+        floater(e.actor_ids[0]!, 'theft', '#f85149');
+        if (e.actor_ids[1]) floater(e.actor_ids[1], 'robbed', '#f0883e');
+        break;
+      case 'incident_assault':
+        floater(e.actor_ids[0]!, 'assault', '#f85149');
+        if (e.actor_ids[1]) floater(e.actor_ids[1], 'hurt', '#f0883e');
+        break;
+      case 'incident_fraud':
+        floater(e.actor_ids[0]!, 'fraud', '#f0c84a');
+        if (e.actor_ids[1]) floater(e.actor_ids[1], 'scammed', '#f0883e');
+        break;
+      case 'incident_breach':
+        floater(e.actor_ids[0]!, 'breach', '#f0c84a');
+        break;
+      case 'agent_accused':
+        floater(e.actor_ids[1]!, 'accused', '#f0c84a');
+        break;
+      case 'agent_jailed':
+        floater(e.actor_ids[0]!, 'jailed', '#f85149');
+        break;
+      case 'agent_released':
+        floater(e.actor_ids[0]!, 'released', '#7ee787');
+        break;
       case 'agent_died':
         floater(e.actor_ids[0]!, '✝', '#888');
         break;

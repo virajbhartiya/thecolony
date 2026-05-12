@@ -81,6 +81,7 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   const sociability = agent.traits.sociability;
   const greed = agent.traits.greed;
   const empathy = agent.traits.empathy;
+  const risk = agent.traits.risk;
   const bal = agent.balance_cents;
   const ambition = agent.traits.ambition;
   const isBroker = (agent.occupation ?? '').toLowerCase().includes('broker');
@@ -167,6 +168,17 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   if (ctx.nearby_rich_agent_id) {
     const desperate = bal < 2000 && (greed > 0.45 || hunger > 70);
     const opportunistic = greed > 0.7 && empathy < 0.45;
+    const violent = risk > 0.78 && empathy < 0.28;
+    if (isBroker && greed > 0.55 && risk > 0.42 && rng() < 0.22) {
+      return {
+        kind: 'fraud',
+        target_agent_id: ctx.nearby_rich_agent_id,
+        amount_cents: 900 + Math.floor(greed * 3200),
+      };
+    }
+    if (violent && rng() < 0.14) {
+      return { kind: 'assault', target_agent_id: ctx.nearby_rich_agent_id };
+    }
     if ((desperate || opportunistic) && rng() < 0.45) {
       return { kind: 'steal', target_agent_id: ctx.nearby_rich_agent_id, item_or_money: 'money' };
     }

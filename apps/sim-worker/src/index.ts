@@ -9,12 +9,14 @@ import { spawnMigrantsIfNeeded } from './migrants';
 import { applyCivicCycle, ensureGovernment } from './government';
 import { clearMarketOrders, ensureEquityMarket } from './market';
 import { ensureJobPostings } from './workforce';
+import { applyCourtSession, releaseJailedAgents } from './justice';
 import { closePublisher } from './publisher';
 
 const TICK_MS = env().WORLD_TICK_MS;
 const MOVEMENT_MS = 250;
 const NEEDS_DECAY_EVERY_TICKS = 6; // every 6s
 const MARKET_EVERY_TICKS = 15;
+const COURT_EVERY_TICKS = 30;
 // Demo cadence: dailies fire every 60s real time so GDP/payroll/rent visibly move.
 const DAILY_EVERY_TICKS = 60;
 
@@ -46,10 +48,16 @@ async function main() {
       if (tickCount % NEEDS_DECAY_EVERY_TICKS === 0) {
         await decayNeedsAll();
         await sweepDeaths();
+        const released = await releaseJailedAgents();
+        if (released > 0) log.info({ released }, 'jail release');
       }
       if (tickCount % MARKET_EVERY_TICKS === 0) {
         const trades = await clearMarketOrders();
         if (trades > 0) log.info({ trades }, 'market clear');
+      }
+      if (tickCount % COURT_EVERY_TICKS === 0) {
+        const cases = await applyCourtSession();
+        if (cases > 0) log.info({ cases }, 'court session');
       }
       if (tickCount % DAILY_EVERY_TICKS === 0) {
         log.info('daily: production + payroll + rent + civic cycle + migrants');

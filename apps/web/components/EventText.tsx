@@ -28,6 +28,22 @@ export function eventText(kind: string, payload: Record<string, unknown> = {}): 
       return `${String(payload.ticker ?? payload.asset ?? 'shares')} traded ${String(payload.qty ?? '?')} shares at $${(Number(payload.price_cents ?? 0) / 100).toFixed(2)}`;
     case 'incident_theft':
       return `theft of $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)} reported`;
+    case 'incident_assault':
+      return `assault reported, severity ${String(payload.severity ?? '?')}`;
+    case 'incident_fraud':
+      return `fraud of $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)} reported`;
+    case 'incident_breach':
+      return `contract breach worth $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)} reported`;
+    case 'incident_witnessed':
+      return `witnessed ${String(payload.charge ?? 'an incident')}`;
+    case 'agent_accused':
+      return `accused someone of ${String(payload.charge ?? 'a crime')}`;
+    case 'court_verdict':
+      return `${payload.guilty ? 'guilty' : 'not guilty'} verdict for ${String(payload.charge ?? 'case')}`;
+    case 'agent_jailed':
+      return `jailed for ${String(payload.charge ?? 'a case')}`;
+    case 'agent_released':
+      return `released on parole`;
     case 'agent_died':
       return `died from ${String(payload.cause ?? 'unknown causes')}`;
     default:

@@ -265,6 +265,24 @@ function labelEvent(kind: string, payload: Record<string, unknown>): string {
       return `hired at ${String(payload.company ?? '…')} as ${String(payload.role ?? 'worker')}`;
     case 'agent_fired':
       return `fired from ${String(payload.company ?? '…')}`;
+    case 'incident_theft':
+      return `theft reported: $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
+    case 'incident_assault':
+      return `assault reported`;
+    case 'incident_fraud':
+      return `fraud reported: $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
+    case 'incident_breach':
+      return `contract breach reported`;
+    case 'incident_witnessed':
+      return `witnessed ${String(payload.charge ?? 'a case')}`;
+    case 'agent_accused':
+      return `accused in ${String(payload.charge ?? 'a case')}`;
+    case 'court_verdict':
+      return `${payload.guilty ? 'guilty' : 'not guilty'} verdict`;
+    case 'agent_jailed':
+      return `jailed until ${payload.jail_until ? new Date(String(payload.jail_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'release'}`;
+    case 'agent_released':
+      return `released on parole`;
     case 'agent_died':
       return `died (${String(payload.cause ?? '…')})`;
     default:

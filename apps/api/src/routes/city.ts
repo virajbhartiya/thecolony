@@ -243,21 +243,236 @@ export async function registerCityRoutes(app: FastifyInstance) {
     return { companies, recentLedger, orders, trades };
   });
 
+  app.get('/v1/companies', async () => {
+    const companies = await db.execute<{
+      id: string;
+      name: string;
+      industry: string | null;
+      ticker: string | null;
+      treasury_cents: number;
+      founder_id: string | null;
+      founder_name: string | null;
+      building_id: string | null;
+      building_name: string | null;
+      building_kind: string | null;
+      workers: number;
+      payroll_cents: number;
+      inventory_qty: number;
+      shares_outstanding: number;
+      last_price_cents: number | null;
+      open_orders: number;
+    }>(sql`
+      WITH worker_stats AS (
+        SELECT company_id, COUNT(*)::int AS workers, COALESCE(SUM(wage_cents), 0)::bigint AS payroll_cents
+        FROM ${schema.job}
+        WHERE ended_at IS NULL
+        GROUP BY company_id
+      ),
+      inventory_stats AS (
+        SELECT owner_id AS company_id, COALESCE(SUM(qty), 0)::int AS inventory_qty
+        FROM ${schema.inventory}
+        WHERE owner_kind = 'company'
+        GROUP BY owner_id
+      ),
+      share_stats AS (
+        SELECT company_id, COALESCE(SUM(shares), 0)::bigint AS shares_outstanding
+        FROM ${schema.share_holding}
+        GROUP BY company_id
+      ),
+      order_stats AS (
+        SELECT ref_id AS company_id, COUNT(*)::int AS open_orders
+        FROM ${schema.market_order}
+        WHERE status IN ('open','partial') AND qty > filled_qty
+        GROUP BY ref_id
+      )
+      SELECT c.id, c.name, c.industry, c.ticker, c.treasury_cents,
+        c.founder_id, founder.name AS founder_name,
+        b.id AS building_id, b.name AS building_name, b.kind AS building_kind,
+        COALESCE(ws.workers, 0)::int AS workers,
+        COALESCE(ws.payroll_cents, 0)::bigint AS payroll_cents,
+        COALESCE(inv.inventory_qty, 0)::int AS inventory_qty,
+        COALESCE(ss.shares_outstanding, 0)::bigint AS shares_outstanding,
+        (
+          SELECT po.price_cents
+          FROM ${schema.price_observation} po
+          WHERE po.asset = ('shares:' || c.id::text)
+          ORDER BY po.t DESC
+          LIMIT 1
+        )::bigint AS last_price_cents,
+        COALESCE(os.open_orders, 0)::int AS open_orders
+      FROM ${schema.company} c
+      LEFT JOIN ${schema.agent} founder ON founder.id = c.founder_id
+      LEFT JOIN ${schema.building} b ON b.id = c.building_id
+      LEFT JOIN worker_stats ws ON ws.company_id = c.id
+      LEFT JOIN inventory_stats inv ON inv.company_id = c.id
+      LEFT JOIN share_stats ss ON ss.company_id = c.id
+      LEFT JOIN order_stats os ON os.company_id = c.id
+      WHERE c.dissolved_at IS NULL AND c.building_id IS NOT NULL
+      ORDER BY COALESCE(ws.workers, 0) DESC, c.treasury_cents DESC, c.name
+    `);
+
+    const roles = await db.execute<{
+      company_id: string;
+      role: string;
+      workers: number;
+      avg_wage_cents: number;
+    }>(sql`
+      SELECT company_id, role, COUNT(*)::int AS workers, ROUND(AVG(wage_cents))::bigint AS avg_wage_cents
+      FROM ${schema.job}
+      WHERE ended_at IS NULL
+      GROUP BY company_id, role
+      ORDER BY workers DESC, role
+    `);
+
+    const postings = await db.execute<{
+      company_id: string;
+      company: string;
+      role: string;
+      openings: number;
+      t: string;
+    }>(sql`
+      SELECT (payload->>'company_id')::uuid AS company_id,
+        payload->>'company' AS company,
+        payload->>'role' AS role,
+        MAX((payload->>'openings')::int)::int AS openings,
+        MAX(t) AS t
+      FROM ${schema.world_event}
+      WHERE kind = 'job_posted'
+        AND t > now() - interval '45 minutes'
+        AND payload->>'company_id' IS NOT NULL
+      GROUP BY payload->>'company_id', payload->>'company', payload->>'role'
+      ORDER BY MAX(t) DESC
+      LIMIT 30
+    `);
+
+    const professionMix = await db.execute<{
+      occupation: string;
+      agents: number;
+      employed: number;
+      unemployed: number;
+    }>(sql`
+      SELECT COALESCE(a.occupation, 'unassigned') AS occupation,
+        COUNT(*)::int AS agents,
+        COUNT(j.id)::int AS employed,
+        (COUNT(*) - COUNT(j.id))::int AS unemployed
+      FROM ${schema.agent} a
+      LEFT JOIN ${schema.job} j ON j.agent_id = a.id AND j.ended_at IS NULL
+      WHERE a.status = 'alive'
+      GROUP BY COALESCE(a.occupation, 'unassigned')
+      ORDER BY agents DESC, occupation
+    `);
+
+    return { companies, roles, postings, professionMix };
+  });
+
   app.get('/v1/crime', async () => {
-    const incidents = await db
-      .select()
-      .from(schema.incident)
-      .orderBy(desc(schema.incident.t))
-      .limit(100);
-    const topCriminals = await db.execute<{ id: string; name: string; occupation: string | null; incidents: number; severity: number }>(sql`
-      SELECT a.id, a.name, a.occupation, COUNT(i.id)::int AS incidents, COALESCE(SUM(i.severity), 0)::int AS severity
+    const incidents = await db.execute<{
+      id: string;
+      t: string;
+      kind: string;
+      perp_id: string | null;
+      victim_id: string | null;
+      severity: number;
+      resolved: boolean;
+      perp_name: string | null;
+      victim_name: string | null;
+      amount_cents: number;
+      location_id: string | null;
+      location_name: string | null;
+    }>(sql`
+      SELECT i.id, i.t, i.kind, i.perp_id, i.victim_id, i.severity, i.resolved,
+        perp.name AS perp_name,
+        victim.name AS victim_name,
+        COALESCE((
+          SELECT MAX((e.payload->>'amount_cents')::bigint)
+          FROM ${schema.world_event} e
+          WHERE e.payload->>'incident_id' = i.id::text
+        ), 0)::bigint AS amount_cents,
+        (
+          SELECT e.location_id
+          FROM ${schema.world_event} e
+          WHERE e.payload->>'incident_id' = i.id::text
+            AND e.location_id IS NOT NULL
+          ORDER BY e.t ASC
+          LIMIT 1
+        ) AS location_id,
+        (
+          SELECT b.name
+          FROM ${schema.world_event} e
+          JOIN ${schema.building} b ON b.id = e.location_id
+          WHERE e.payload->>'incident_id' = i.id::text
+            AND e.location_id IS NOT NULL
+          ORDER BY e.t ASC
+          LIMIT 1
+        ) AS location_name
+      FROM ${schema.incident} i
+      LEFT JOIN ${schema.agent} perp ON perp.id = i.perp_id
+      LEFT JOIN ${schema.agent} victim ON victim.id = i.victim_id
+      ORDER BY i.t DESC
+      LIMIT 100
+    `);
+    const topCriminals = await db.execute<{
+      id: string;
+      name: string;
+      occupation: string | null;
+      status: string;
+      incidents: number;
+      severity: number;
+      warrants: number;
+      bounty_cents: number;
+      jail_until: string | null;
+    }>(sql`
+      SELECT a.id, a.name, a.occupation, a.status,
+        COUNT(i.id)::int AS incidents,
+        COALESCE(SUM(i.severity), 0)::int AS severity,
+        COALESCE(l.warrants, 0)::int AS warrants,
+        COALESCE(l.bounty_cents, 0)::bigint AS bounty_cents,
+        l.jail_until
       FROM ${schema.agent} a
       JOIN ${schema.incident} i ON i.perp_id = a.id
-      GROUP BY a.id, a.name, a.occupation
+      LEFT JOIN ${schema.legal_status} l ON l.agent_id = a.id
+      GROUP BY a.id, a.name, a.occupation, a.status, l.warrants, l.bounty_cents, l.jail_until
+      ORDER BY severity DESC, warrants DESC, incidents DESC
+      LIMIT 20
+    `);
+    const legal = await db.execute<{
+      agent_id: string;
+      name: string;
+      occupation: string | null;
+      status: string;
+      warrants: number;
+      debts_cents: number;
+      bounty_cents: number;
+      jail_until: string | null;
+      parole_until: string | null;
+    }>(sql`
+      SELECT l.agent_id, a.name, a.occupation, a.status, l.warrants,
+        l.debts_cents, l.bounty_cents, l.jail_until, l.parole_until
+      FROM ${schema.legal_status} l
+      JOIN ${schema.agent} a ON a.id = l.agent_id
+      WHERE l.warrants > 0 OR l.bounty_cents > 0 OR l.jail_until IS NOT NULL OR l.debts_cents > 0
+      ORDER BY l.warrants DESC, l.bounty_cents DESC, l.jail_until DESC NULLS LAST
+      LIMIT 30
+    `);
+    const heatmap = await db.execute<{
+      location_id: string;
+      name: string;
+      kind: string;
+      incidents: number;
+      severity: number;
+    }>(sql`
+      SELECT e.location_id, b.name, b.kind,
+        COUNT(DISTINCT e.payload->>'incident_id')::int AS incidents,
+        COALESCE(SUM((e.payload->>'severity')::int), 0)::int AS severity
+      FROM ${schema.world_event} e
+      JOIN ${schema.building} b ON b.id = e.location_id
+      WHERE e.kind IN ('incident_theft', 'incident_assault', 'incident_fraud', 'incident_breach')
+        AND e.location_id IS NOT NULL
+      GROUP BY e.location_id, b.name, b.kind
       ORDER BY severity DESC, incidents DESC
       LIMIT 20
     `);
-    return { incidents, topCriminals };
+    return { incidents, topCriminals, legal, heatmap };
   });
 
   app.get('/v1/groups', async () => {
@@ -346,6 +561,18 @@ function headlineFor(kind: string, payload: Record<string, unknown>): string {
       return `${String(payload.name ?? 'A citizen')} dies from ${String(payload.cause ?? 'unknown causes')}`;
     case 'incident_theft':
       return `Theft reported: $${money(payload.amount_cents)} stolen`;
+    case 'incident_assault':
+      return `Assault reported with severity ${String(payload.severity ?? '?')}`;
+    case 'incident_fraud':
+      return `Fraud reported: $${money(payload.amount_cents)} diverted`;
+    case 'incident_breach':
+      return `Contract breach reported: $${money(payload.amount_cents)} disputed`;
+    case 'court_verdict':
+      return `${payload.guilty ? 'Guilty' : 'Not guilty'} verdict in ${String(payload.charge ?? 'case')}`;
+    case 'agent_jailed':
+      return `A citizen is jailed for ${String(payload.charge ?? 'a case')}`;
+    case 'agent_released':
+      return `A citizen is released on parole`;
     default:
       return kind.replaceAll('_', ' ');
   }

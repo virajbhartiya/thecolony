@@ -24,6 +24,13 @@ const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   migrant_arrived: { label: 'migrant', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   incident_theft: { label: 'theft', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
   incident_assault: { label: 'assault', tone: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
+  incident_fraud: { label: 'fraud', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
+  incident_breach: { label: 'breach', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
+  incident_witnessed: { label: 'witness', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
+  agent_accused: { label: 'accused', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
+  court_verdict: { label: 'court', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
+  agent_jailed: { label: 'jailed', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
+  agent_released: { label: 'released', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   city_founded: { label: 'civic', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   city_tax_collected: { label: 'taxes', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   city_aid_paid: { label: 'aid', tone: 'text-blue-300 border-blue-500/30 bg-blue-500/10' },
@@ -111,6 +118,24 @@ function describeEvent(e: { kind: string; payload: Record<string, unknown> }): s
       return `${String(p.side ?? 'order')} ${String(p.ticker ?? p.asset ?? 'shares')} $${(Number(p.price_cents ?? 0) / 100).toFixed(2)} x ${String(p.qty ?? '?')}`;
     case 'trade_executed':
       return `${String(p.ticker ?? p.asset ?? 'shares')} $${(Number(p.price_cents ?? 0) / 100).toFixed(2)} x ${String(p.qty ?? '?')}`;
+    case 'incident_theft':
+      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} stolen`;
+    case 'incident_assault':
+      return `severity ${String(p.severity ?? '?')}`;
+    case 'incident_fraud':
+      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} fraud`;
+    case 'incident_breach':
+      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} breach`;
+    case 'incident_witnessed':
+      return `${String(p.charge ?? 'case')} reported nearby`;
+    case 'agent_accused':
+      return `charged with ${String(p.charge ?? 'case')}`;
+    case 'court_verdict':
+      return `${p.guilty ? 'guilty' : 'not guilty'} on ${String(p.charge ?? 'case')}`;
+    case 'agent_jailed':
+      return `${String(p.charge ?? 'case')} until ${p.jail_until ? new Date(String(p.jail_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'release'}`;
+    case 'agent_released':
+      return `parole until ${p.parole_until ? new Date(String(p.parole_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'later'}`;
     case 'agent_moved':
       return `to ${String(p.to ?? '...')}`;
     case 'agent_homed':

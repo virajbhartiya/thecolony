@@ -34,6 +34,7 @@ async function main() {
     ${schema.conversation},
     ${schema.group_membership},
     ${schema.ideology_group},
+    ${schema.legal_status},
     ${schema.incident},
     ${schema.agent_memory},
     ${schema.agent_relationship},

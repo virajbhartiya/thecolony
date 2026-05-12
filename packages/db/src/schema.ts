@@ -297,6 +297,23 @@ export const incident = pgTable(
   }),
 );
 
+export const legal_status = pgTable(
+  'legal_status',
+  {
+    agent_id: uuid('agent_id').primaryKey(),
+    warrants: integer('warrants').notNull().default(0),
+    debts_cents: bigint('debts_cents', { mode: 'number' }).notNull().default(0),
+    bounty_cents: bigint('bounty_cents', { mode: 'number' }).notNull().default(0),
+    jail_until: timestamp('jail_until', { withTimezone: true }),
+    parole_until: timestamp('parole_until', { withTimezone: true }),
+    updated_at: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    warrants_idx: index('legal_status_warrants_idx').on(t.warrants),
+    jail_until_idx: index('legal_status_jail_until_idx').on(t.jail_until),
+  }),
+);
+
 export const death_event = pgTable('death_event', {
   agent_id: uuid('agent_id').primaryKey(),
   t: timestamp('t', { withTimezone: true }).notNull().defaultNow(),
