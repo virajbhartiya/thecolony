@@ -143,6 +143,9 @@ export const useWorld = create<WorldState>((set, get) => ({
       case 'agent_evicted':
         floater(e.actor_ids[0]!, 'evicted', '#f85149');
         break;
+      case 'agent_fired':
+        floater(e.actor_ids[0]!, 'fired', '#f85149');
+        break;
       case 'agent_died':
         floater(e.actor_ids[0]!, '✝', '#888');
         break;

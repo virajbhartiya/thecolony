@@ -28,6 +28,9 @@ export interface HeuristicContext {
   owned_company_id?: string | null;
   hire_candidate_id?: string | null;
   hire_role?: string | null;
+  fire_candidate_id?: string | null;
+  company_worker_count?: number;
+  company_treasury_cents?: number;
   founder_pressure?: number;
   market_assets?: Array<{
     company_id: string;
@@ -118,6 +121,13 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
       wage_cents: 1800 + Math.floor(ambition * 900),
       role: ctx.hire_role ?? 'worker',
     };
+  }
+
+  if (ctx.owned_company_id && ctx.fire_candidate_id && (ctx.company_worker_count ?? 0) > 2) {
+    const pressure = (ctx.company_treasury_cents ?? 0) < 25_000 ? 0.35 : 0.08;
+    if (rng() < pressure + greed * 0.18) {
+      return { kind: 'fire', agent_id: ctx.fire_candidate_id };
+    }
   }
 
   if (!ctx.owned_company_id && !ctx.has_job && bal > 25000 && ambition > 0.68 && rng() < 0.08) {

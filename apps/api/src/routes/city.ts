@@ -320,8 +320,12 @@ function headlineFor(kind: string, payload: Record<string, unknown>): string {
       return `City Hall collects $${money(payload.amount_cents)} in taxes`;
     case 'company_founded':
       return `${String(payload.name ?? 'A company')} opens for business`;
+    case 'job_posted':
+      return `${String(payload.company ?? 'A company')} is hiring ${String(payload.role ?? 'workers')}`;
     case 'agent_hired':
       return `${String(payload.company ?? 'A company')} hires a ${String(payload.role ?? 'worker')}`;
+    case 'agent_fired':
+      return `${String(payload.company ?? 'A company')} fires a ${String(payload.role ?? 'worker')}`;
     case 'agent_evicted':
       return `Eviction at $${money(payload.rent)} daily rent`;
     case 'agent_died':

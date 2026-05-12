@@ -8,6 +8,7 @@ import { applyPayroll, collectRent, applyDailyProduction } from './economy';
 import { spawnMigrantsIfNeeded } from './migrants';
 import { applyCivicCycle, ensureGovernment } from './government';
 import { clearMarketOrders, ensureEquityMarket } from './market';
+import { ensureJobPostings } from './workforce';
 import { closePublisher } from './publisher';
 
 const TICK_MS = env().WORLD_TICK_MS;
@@ -22,6 +23,7 @@ let stopping = false;
 async function main() {
   await ensureGovernment();
   await ensureEquityMarket();
+  await ensureJobPostings();
   log.info(
     {
       llm: hasLLMKey() ? 'live (key detected)' : 'heuristic fallback (no key)',
@@ -56,6 +58,7 @@ async function main() {
         await collectRent();
         await applyCivicCycle();
         await ensureEquityMarket();
+        await ensureJobPostings();
         await spawnMigrantsIfNeeded();
       }
     } catch (e) {

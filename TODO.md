@@ -212,7 +212,7 @@ Goal: shareable. Every screen pulls its weight.
 
 - [x] **M6-T01** Add `company`, `company_member`, `share_holding`, `market_order` schemas.
 - [x] **M6-T02** `found_company` action: requires min capital. Creates company row, charter, founder as exec.
-- [ ] **M6-T03** `hire` / `fire` actions; companies emit job postings; `seek_job` matches against postings.
+- [x] **M6-T03** `hire` / `fire` actions; companies emit job postings; `seek_job` matches against postings.
 - [x] **M6-T04** `issue_shares` action; once issued past threshold, company appears on `/market`.
 - [x] **M6-T05** Market clearer (BullMQ repeatable every 15 sim-min): price-time priority match, write trades to ledger, update share holdings, emit `trade` events.
 - [ ] **M6-T06** `/market` page: list public companies with price sparklines, order book preview, top movers.

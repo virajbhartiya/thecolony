@@ -15,6 +15,7 @@ const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   agent_slept: { label: 'sleep', tone: 'text-zinc-400 border-zinc-600/30 bg-white/[0.03]' },
   agent_moved: { label: 'move', tone: 'text-zinc-500 border-zinc-700/30 bg-white/[0.02]' },
   agent_worked: { label: 'work', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
+  job_posted: { label: 'jobs', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   company_founded: { label: 'company', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
   shares_issued: { label: 'shares', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
   order_placed: { label: 'order', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
@@ -98,6 +99,10 @@ function describeEvent(e: { kind: string; payload: Record<string, unknown> }): s
       return `mayor ${String(p.mayor_name ?? 'unseated')}, tax ${(Number(p.tax_rate_bps ?? 0) / 100).toFixed(1)}%`;
     case 'agent_hired':
       return `as ${String(p.role ?? 'worker')} at ${String(p.company ?? 'a company')}`;
+    case 'agent_fired':
+      return `${String(p.role ?? 'worker')} from ${String(p.company ?? 'a company')}`;
+    case 'job_posted':
+      return `${String(p.company ?? 'company')} needs ${String(p.openings ?? '?')} ${String(p.role ?? 'worker')}`;
     case 'company_founded':
       return `${String(p.name ?? 'company')} by ${String(p.founder ?? 'founder')}`;
     case 'shares_issued':

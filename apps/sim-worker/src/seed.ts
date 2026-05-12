@@ -14,6 +14,7 @@ import {
 } from '@thecolony/sim';
 import { log } from './log';
 import { ensureEquityMarket } from './market';
+import { ensureJobPostings } from './workforce';
 
 async function main() {
   log.info('seeding world');
@@ -246,6 +247,7 @@ async function main() {
     payload: government,
   });
   await ensureEquityMarket();
+  await ensureJobPostings();
 
   log.info('seed complete');
 }

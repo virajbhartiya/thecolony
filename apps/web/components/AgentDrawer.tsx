@@ -263,6 +263,8 @@ function labelEvent(kind: string, payload: Record<string, unknown>): string {
       return `moved in to ${String(payload.building ?? '…')}`;
     case 'agent_hired':
       return `hired at ${String(payload.company ?? '…')} as ${String(payload.role ?? 'worker')}`;
+    case 'agent_fired':
+      return `fired from ${String(payload.company ?? '…')}`;
     case 'agent_died':
       return `died (${String(payload.cause ?? '…')})`;
     default:

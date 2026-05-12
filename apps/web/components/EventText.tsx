@@ -4,6 +4,10 @@ export function eventText(kind: string, payload: Record<string, unknown> = {}): 
       return `said "${String(payload.body ?? '').slice(0, 120)}"`;
     case 'agent_hired':
       return `hired as ${String(payload.role ?? 'worker')} at ${String(payload.company ?? 'a company')}`;
+    case 'agent_fired':
+      return `fired from ${String(payload.company ?? 'a company')}`;
+    case 'job_posted':
+      return `${String(payload.company ?? 'A company')} posted ${String(payload.openings ?? '?')} ${String(payload.role ?? 'worker')} opening(s)`;
     case 'agent_paid_wage':
       return `earned $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)} in wages`;
     case 'agent_paid_rent':

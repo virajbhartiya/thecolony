@@ -6,6 +6,7 @@ import { mulberry32, hashStringSeed } from '@thecolony/sim';
 import { writeEvent } from './event-writer';
 import { log } from './log';
 import { shareAsset, tickerForCompany } from './market';
+import { roleForIndustry, wageForRole } from './workforce';
 
 const TICK_INTERVAL_MS = 60 * 1000; // 60s real seconds between decisions
 
@@ -82,7 +83,9 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
   const ownedCompany = await db
     .select({
       id: schema.company.id,
+      name: schema.company.name,
       industry: schema.company.industry,
+      treasury_cents: schema.company.treasury_cents,
     })
     .from(schema.company)
     .where(eq(schema.company.founder_id, agent.id))
@@ -90,11 +93,14 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
 
   let hireCandidateId: string | null = null;
   let hireRole: string | null = null;
+  let fireCandidateId: string | null = null;
+  let companyWorkerCount = 0;
   if (ownedCompany[0]) {
     const workerCount = await db.execute<{ n: number }>(
       sql`SELECT COUNT(*)::int AS n FROM ${schema.job} WHERE company_id=${ownedCompany[0].id} AND ended_at IS NULL`,
     );
-    if (Number(workerCount[0]?.n ?? 0) < 5) {
+    companyWorkerCount = Number(workerCount[0]?.n ?? 0);
+    if (companyWorkerCount < 5) {
       const candidates = await db.execute<{ id: string; occupation: string | null }>(sql`
         SELECT a.id, a.occupation
         FROM ${schema.agent} a
@@ -108,6 +114,18 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
       hireCandidateId = candidates[0]?.id ?? null;
       hireRole = candidates[0]?.occupation?.toLowerCase() ?? 'worker';
     }
+    const fireCandidates = await db.execute<{ id: string }>(sql`
+      SELECT a.id
+      FROM ${schema.job} j
+      JOIN ${schema.agent} a ON a.id = j.agent_id
+      WHERE j.company_id = ${ownedCompany[0].id}
+        AND j.ended_at IS NULL
+        AND a.id <> ${agent.id}
+        AND a.status = 'alive'
+      ORDER BY j.wage_cents DESC, j.started_at DESC
+      LIMIT 1
+    `);
+    fireCandidateId = fireCandidates[0]?.id ?? null;
   }
 
   const foodInv = await db.execute<{ qty: number }>(
@@ -203,6 +221,9 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     owned_company_id: ownedCompany[0]?.id ?? null,
     hire_candidate_id: hireCandidateId,
     hire_role: hireRole,
+    fire_candidate_id: fireCandidateId,
+    company_worker_count: companyWorkerCount,
+    company_treasury_cents: Number(ownedCompany[0]?.treasury_cents ?? 0),
     market_assets: marketAssets.map((asset) => ({
       ...asset,
       last_price_cents: Number(asset.last_price_cents),
@@ -213,7 +234,7 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
   };
 }
 
-async function applyAction(agent: Agent, action: Action, allBuildings: BuildingRow[]): Promise<void> {
+export async function applyAction(agent: Agent, action: Action, allBuildings: BuildingRow[]): Promise<void> {
   switch (action.kind) {
     case 'idle':
       await db.update(schema.agent).set({ state: 'idle' }).where(eq(schema.agent.id, agent.id));
@@ -281,29 +302,57 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
     }
     case 'seek_job': {
       const desired = (agent.occupation ?? '').toLowerCase();
-      const companies = await db
-        .select()
-        .from(schema.company)
-        .orderBy(sql`
+      const companies = await db.execute<{
+        id: string;
+        name: string;
+        industry: string | null;
+        treasury_cents: number;
+        has_posting: boolean;
+        workers: number;
+      }>(sql`
+        WITH worker_stats AS (
+          SELECT company_id, COUNT(*)::int AS workers
+          FROM ${schema.job}
+          WHERE ended_at IS NULL
+          GROUP BY company_id
+        )
+        SELECT c.id, c.name, c.industry, c.treasury_cents,
+          COALESCE(ws.workers, 0)::int AS workers,
+          EXISTS (
+            SELECT 1
+            FROM ${schema.world_event} e
+            WHERE e.kind = 'job_posted'
+              AND e.payload->>'company_id' = c.id::text
+              AND e.t > now() - interval '30 minutes'
+          ) AS has_posting
+        FROM ${schema.company} c
+        LEFT JOIN worker_stats ws ON ws.company_id = c.id
+        WHERE c.dissolved_at IS NULL AND c.building_id IS NOT NULL
+        ORDER BY
+          has_posting DESC,
           CASE
-            WHEN lower(coalesce(${schema.company.industry}, '')) = ${desired} THEN 0
-            WHEN ${desired} LIKE '%' || lower(coalesce(${schema.company.industry}, '')) || '%' THEN 1
+            WHEN lower(coalesce(c.industry, '')) = ${desired} THEN 0
+            WHEN ${desired} LIKE '%' || lower(coalesce(c.industry, '')) || '%' THEN 1
             ELSE 2
           END,
-          ${schema.company.treasury_cents} DESC
-        `)
-        .limit(30);
+          c.treasury_cents DESC
+        LIMIT 30
+      `);
       for (const c of companies) {
-        const workers = await db.execute<{ n: number }>(
-          sql`SELECT COUNT(*)::int AS n FROM ${schema.job} WHERE company_id=${c.id} AND ended_at IS NULL`,
-        );
-        if (Number(workers[0]?.n ?? 0) < 5) {
+        if (Number(c.workers) < 5) {
+          const role = agent.occupation?.toLowerCase() ?? roleForIndustry(c.industry);
+          const wage_cents = c.has_posting ? wageForRole(role) : wageForOccupation(agent.occupation);
           await db.insert(schema.job).values({
             agent_id: agent.id,
             company_id: c.id,
-            role: agent.occupation?.toLowerCase() ?? 'worker',
-            wage_cents: wageForOccupation(agent.occupation),
+            role,
+            wage_cents,
           });
+          await db.execute(sql`
+            INSERT INTO ${schema.company_member} (agent_id, company_id, role)
+            VALUES (${agent.id}, ${c.id}, 'worker')
+            ON CONFLICT DO NOTHING
+          `);
           await db
             .update(schema.agent)
             .set({ employer_id: c.id, occupation: agent.occupation ?? c.industry ?? 'worker' })
@@ -312,7 +361,7 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
             kind: 'agent_hired',
             actor_ids: [agent.id, c.id],
             importance: 5,
-            payload: { role: agent.occupation ?? 'worker', wage_cents: wageForOccupation(agent.occupation), company: c.name },
+            payload: { role, wage_cents, company: c.name, matched_posting: c.has_posting },
           });
           return;
         }
@@ -336,6 +385,11 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
         role: action.role,
         wage_cents: Math.max(1000, Math.min(6000, action.wage_cents)),
       });
+      await db.execute(sql`
+        INSERT INTO ${schema.company_member} (agent_id, company_id, role)
+        VALUES (${target.id}, ${owned.id}, 'worker')
+        ON CONFLICT DO NOTHING
+      `);
       await db
         .update(schema.agent)
         .set({ employer_id: owned.id, occupation: target.occupation ?? action.role })
@@ -349,6 +403,33 @@ async function applyAction(agent: Agent, action: Action, allBuildings: BuildingR
           wage_cents: action.wage_cents,
           company: owned.name,
           hired_by: agent.name,
+        },
+      });
+      return;
+    }
+    case 'fire': {
+      const [owned] = await db.select().from(schema.company).where(eq(schema.company.founder_id, agent.id)).limit(1);
+      if (!owned) return;
+      const [job] = await db
+        .select()
+        .from(schema.job)
+        .where(and(eq(schema.job.company_id, owned.id), eq(schema.job.agent_id, action.agent_id), isNull(schema.job.ended_at)))
+        .limit(1);
+      if (!job || job.agent_id === agent.id) return;
+      await db.update(schema.job).set({ ended_at: new Date() }).where(eq(schema.job.id, job.id));
+      await db
+        .update(schema.agent)
+        .set({ employer_id: null, state: 'idle' })
+        .where(eq(schema.agent.id, job.agent_id));
+      await writeEvent({
+        kind: 'agent_fired',
+        actor_ids: [job.agent_id, agent.id, owned.id],
+        importance: 7,
+        payload: {
+          company: owned.name,
+          role: job.role,
+          fired_by: agent.name,
+          reason: Number(owned.treasury_cents) < 25_000 ? 'cash pressure' : 'owner discretion',
         },
       });
       return;
