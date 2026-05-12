@@ -197,6 +197,49 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   const isBroker = (agent.occupation ?? '').toLowerCase().includes('broker');
   const occupation = (agent.occupation ?? '').toLowerCase();
   const isGuard = occupation.includes('guard') || occupation.includes('civil servant');
+  const isOfficer = (ctx.job_industry ?? '') === 'precinct';
+  const isStudent = agent.age_years < 18 || agent.state === 'student';
+
+  // Kids go to school. Most of the time. Skipping happens at the move-handler
+  // level — if they're already at a school they just hang out.
+  if (isStudent) {
+    if (energy < 22) {
+      const home = ctx.buildings.find((b) => b.id === agent.home_id);
+      if (home) return { kind: 'move', to_building_id: home.id };
+      return { kind: 'sleep' };
+    }
+    if (hunger > 65 && ctx.food_qty > 0) return { kind: 'eat', food_qty: 1 };
+    if (rng() < 0.7) return { kind: 'study' };
+    if (ctx.nearby_agents.length > 0 && rng() < sociability * 0.5) {
+      return { kind: 'speak', to: 'nearby', body: pickLine(agent, rng) };
+    }
+    return { kind: 'idle' };
+  }
+
+  // Officers patrol the streets. If there's a wanted nearby they accuse —
+  // their civic-duty multiplier is already high above; the patrol action is
+  // the day-to-day behavior. They occasionally still eat / sleep / socialize.
+  if (isOfficer) {
+    if (energy < 22) {
+      const home = ctx.buildings.find((b) => b.id === agent.home_id);
+      if (home) return { kind: 'move', to_building_id: home.id };
+      return { kind: 'sleep' };
+    }
+    if (hunger > 60 && ctx.food_qty > 0) return { kind: 'eat', food_qty: 1 };
+    if (ctx.wanted_agent_id && ctx.wanted_incident_id) {
+      return {
+        kind: 'accuse',
+        target_agent_id: ctx.wanted_agent_id,
+        charge: ctx.wanted_charge ?? 'outstanding warrant',
+        incident_id: ctx.wanted_incident_id,
+      };
+    }
+    if (rng() < 0.75) return { kind: 'patrol' };
+    if (ctx.nearby_agents.length > 0 && rng() < sociability * 0.4) {
+      return { kind: 'speak', to: 'nearby', body: pickLine(agent, rng) };
+    }
+    return { kind: 'idle' };
+  }
 
   if (!ctx.current_group_id && ambition > 0.62 && sociability > 0.55 && rng() < 0.1) {
     const kind = groupKindFor(agent, ctx);

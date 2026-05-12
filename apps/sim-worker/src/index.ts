@@ -12,7 +12,7 @@ import { clearMarketOrders, ensureEquityMarket } from './market';
 import { ensureJobPostings } from './workforce';
 import { applyCourtSession, releaseJailedAgents } from './justice';
 import { applyBeliefUpdates } from './groups';
-import { applyConceptions, sweepLifecycle } from './lifecycle';
+import { applyAging, applyConceptions, sweepLifecycle } from './lifecycle';
 import { generateDailyReport } from './daily-report';
 import { closePublisher } from './publisher';
 
@@ -82,6 +82,8 @@ async function main() {
         await advanceConstruction();
         const births = await applyConceptions();
         if (births > 0) log.info({ births }, 'births');
+        const aging = await applyAging();
+        if (aging.graduated > 0) log.info({ graduated: aging.graduated }, 'graduations');
         // Always rerun the report so the news page counts (payroll, rent,
         // incidents, etc.) reflect the rolling 24h window, not the snapshot
         // taken at sim-worker boot.

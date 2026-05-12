@@ -197,25 +197,28 @@ export async function applyConceptions(limit = 1, force = false): Promise<number
     const rng = mulberry32(Date.now() ^ created);
     const traits = blendTraits(pair.traits_a, pair.traits_b, rng);
     const name = genName(rng);
+    // Born as a 6-year-old student. The applyAging daily job advances
+    // age + transitions them to 'idle' (workforce) at 18, with a
+    // visible graduation event.
     const [child] = await db
       .insert(schema.agent)
       .values({
         name,
-        born_at: new Date(Date.now() - 18 * 365 * 86400_000),
-        age_years: 18,
+        born_at: new Date(Date.now() - 6 * 365 * 86400_000),
+        age_years: 6,
         traits,
         needs: genStarterNeeds(),
-        occupation: 'Apprentice',
+        occupation: 'Student',
         employer_id: null,
         home_id: pair.home_id,
-        balance_cents: 2500 + Math.floor(rng() * 1500),
+        balance_cents: 200 + Math.floor(rng() * 200),
         status: 'alive',
         portrait_seed: `child-${Date.now()}-${created}-${Math.floor(rng() * 1e9)}`,
         pos_x: Number(pair.tile_x) + 0.5,
         pos_y: Number(pair.tile_y) + 0.5,
         target_x: Number(pair.tile_x) + 0.5,
         target_y: Number(pair.tile_y) + 0.5,
-        state: 'idle',
+        state: 'student',
       })
       .returning({ id: schema.agent.id, name: schema.agent.name });
     if (!child) continue;
@@ -245,6 +248,47 @@ export async function applyConceptions(limit = 1, force = false): Promise<number
     created++;
   }
   return created;
+}
+
+/**
+ * Daily aging tick: every sim-day everyone's age_years goes up by 1.
+ * Kids (age < 18) graduate when they cross 18 — they switch state from
+ * 'student' to 'idle' and join the workforce.
+ */
+export async function applyAging(): Promise<{ aged: number; graduated: number }> {
+  // Find graduates BEFORE bumping age so we can emit the event with the new age.
+  const graduating = await db.execute<{ id: string; name: string }>(sql`
+    SELECT id, name FROM ${schema.agent}
+    WHERE status = 'alive' AND age_years = 17
+  `);
+
+  // bump everyone
+  const aged = await db.execute<{ id: string }>(sql`
+    UPDATE ${schema.agent}
+    SET age_years = age_years + 1,
+        updated_at = now()
+    WHERE status = 'alive'
+    RETURNING id
+  `);
+
+  // transition graduates
+  for (const g of graduating) {
+    await db.execute(sql`
+      UPDATE ${schema.agent}
+      SET state = 'idle',
+          occupation = NULL,
+          updated_at = now()
+      WHERE id = ${g.id}
+    `);
+    await writeEvent({
+      kind: 'agent_graduated',
+      actor_ids: [g.id],
+      importance: 6,
+      payload: { name: g.name, age: 18 },
+    });
+  }
+
+  return { aged: aged.length, graduated: graduating.length };
 }
 
 function blendTraits(a: Traits, b: Traits, rng: () => number): Traits {

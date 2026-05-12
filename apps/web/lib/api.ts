@@ -44,6 +44,7 @@ export interface WorldSnapshot {
     occupation: string | null;
     balance_cents: number;
     portrait_seed: string;
+    age_years?: number;
   }>;
 }
 

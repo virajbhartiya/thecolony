@@ -37,6 +37,8 @@ export const AgentStateKind = z.enum([
   'speaking',
   'jailed',
   'dead',
+  'student',
+  'patrolling',
 ]);
 export type AgentStateKind = z.infer<typeof AgentStateKind>;
 

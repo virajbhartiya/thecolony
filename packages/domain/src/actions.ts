@@ -107,6 +107,8 @@ export const ActionSchema = z.discriminatedUnion('kind', [
     building_kind: z.enum(['shop', 'bar', 'cafe', 'factory', 'farm', 'house', 'apartment']),
     capital_cents: z.number().int().positive(),
   }),
+  z.object({ kind: z.literal('patrol') }),
+  z.object({ kind: z.literal('study') }),
 ]);
 export type Action = z.infer<typeof ActionSchema>;
 

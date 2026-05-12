@@ -14,6 +14,7 @@ export interface AgentLive {
   occupation: string | null;
   balance_cents: number;
   portrait_seed: string;
+  age_years?: number;
   lastBubble?: { text: string; expires: number };
   lastFloater?: { text: string; color: string; expires: number };
 }

@@ -4,11 +4,108 @@
  * Buildings under construction are stored with condition < 100. The daily
  * progress job ticks condition up by ~20 per sim-day. When condition >= 100,
  * the building goes operational (and any company tied to it is activated).
+ *
+ * propose_building now requires raw materials (lumber + stone + sometimes
+ * steel) sourced from sawmill / quarry / steel-mill companies — adds a
+ * real supply chain to the economy.
  */
 import { db, schema } from '@thecolony/db';
 import { eq, sql } from 'drizzle-orm';
 import type { BuildingKind } from '@thecolony/domain';
 import { writeEvent } from './event-writer';
+
+const MATERIAL_ITEM_ID: Record<'lumber' | 'stone' | 'steel', number> = {
+  lumber: 7,
+  stone: 8,
+  steel: 9,
+};
+const MATERIAL_INDUSTRY: Record<'lumber' | 'stone' | 'steel', string> = {
+  lumber: 'sawmill',
+  stone: 'quarry',
+  steel: 'factory', // steel produced by general factories for now
+};
+
+async function sourceMaterials(
+  agentId: string,
+  need: { lumber: number; stone: number; steel: number },
+): Promise<{ ok: true } | { ok: false; missing: Record<string, number> }> {
+  const missing: Record<string, number> = {};
+  for (const mat of ['lumber', 'stone', 'steel'] as const) {
+    const qtyNeeded = need[mat];
+    if (qtyNeeded <= 0) continue;
+    const itemId = MATERIAL_ITEM_ID[mat];
+    const industry = MATERIAL_INDUSTRY[mat];
+
+    // Find the highest-stock producer of this material.
+    const candidates = await db.execute<{ company_id: string; available: number }>(sql`
+      SELECT c.id AS company_id, COALESCE(i.qty, 0) AS available
+      FROM ${schema.company} c
+      LEFT JOIN ${schema.inventory} i
+        ON i.owner_kind = 'company' AND i.owner_id = c.id AND i.item_id = ${itemId}
+      WHERE c.industry = ${industry} AND c.dissolved_at IS NULL
+      ORDER BY i.qty DESC NULLS LAST
+      LIMIT 1
+    `);
+    const supplier = candidates[0];
+    const available = Number(supplier?.available ?? 0);
+    if (!supplier || available < qtyNeeded) {
+      missing[mat] = qtyNeeded - available;
+      continue;
+    }
+    // Price = base × 1.15 markup.
+    const baseUnit = mat === 'lumber' ? 80 : mat === 'stone' ? 60 : 240;
+    const unitPrice = Math.ceil(baseUnit * 1.15);
+    const total = unitPrice * qtyNeeded;
+
+    // Check agent can afford it.
+    const [agentRow] = await db
+      .select({ balance: schema.agent.balance_cents })
+      .from(schema.agent)
+      .where(eq(schema.agent.id, agentId))
+      .limit(1);
+    if (!agentRow || Number(agentRow.balance) < total) {
+      missing[mat] = qtyNeeded;
+      continue;
+    }
+    // Transfer inventory + cash.
+    await db.execute(sql`
+      UPDATE ${schema.inventory} SET qty = qty - ${qtyNeeded}
+      WHERE owner_kind='company' AND owner_id=${supplier.company_id} AND item_id=${itemId}
+    `);
+    await db.execute(sql`
+      INSERT INTO ${schema.inventory} (owner_kind, owner_id, item_id, qty)
+      VALUES ('agent', ${agentId}, ${itemId}, ${qtyNeeded})
+      ON CONFLICT (owner_kind, owner_id, item_id)
+      DO UPDATE SET qty = ${schema.inventory.qty} + EXCLUDED.qty
+    `);
+    await db.update(schema.agent)
+      .set({ balance_cents: sql`${schema.agent.balance_cents} - ${total}` })
+      .where(eq(schema.agent.id, agentId));
+    await db.update(schema.company)
+      .set({ treasury_cents: sql`${schema.company.treasury_cents} + ${total}` })
+      .where(eq(schema.company.id, supplier.company_id));
+    await db.insert(schema.ledger_entry).values({
+      debit_kind: 'agent',
+      debit_id: agentId,
+      credit_kind: 'company',
+      credit_id: supplier.company_id,
+      amount_cents: total,
+      reason: `materials_${mat}`,
+    });
+    await writeEvent({
+      kind: 'construction_materials_purchased',
+      actor_ids: [agentId, supplier.company_id],
+      importance: 3,
+      payload: {
+        material: mat,
+        qty: qtyNeeded,
+        unit_price_cents: unitPrice,
+        amount_cents: total,
+      },
+    });
+  }
+  return Object.keys(missing).length === 0 ? { ok: true } : { ok: false, missing };
+}
 
 const COST_BY_KIND: Record<string, number> = {
   shop: 8_000,
@@ -85,6 +182,18 @@ async function findEmptyPlot(
   return null;
 }
 
+// Materials required to construct a building. Construction now sources lumber
+// + stone from the market (sawmill + quarry) at the moment of proposing.
+const MATERIALS_BY_KIND: Record<string, { lumber: number; stone: number; steel: number }> = {
+  shop:      { lumber: 8,  stone: 6,  steel: 0 },
+  bar:       { lumber: 10, stone: 8,  steel: 0 },
+  cafe:      { lumber: 6,  stone: 4,  steel: 0 },
+  factory:   { lumber: 16, stone: 20, steel: 8 },
+  farm:      { lumber: 14, stone: 4,  steel: 0 },
+  house:     { lumber: 8,  stone: 6,  steel: 0 },
+  apartment: { lumber: 14, stone: 22, steel: 6 },
+};
+
 export async function proposeBuilding(
   agent: { id: string; balance_cents: number; pos_x: number; pos_y: number; name: string },
   buildingKind: BuildingKind,
@@ -97,6 +206,23 @@ export async function proposeBuilding(
   const size = SIZE_BY_KIND[buildingKind]!;
   const plot = await findEmptyPlot({ x: agent.pos_x, y: agent.pos_y }, size.w, size.h);
   if (!plot) return { ok: false, reason: 'no plot' };
+
+  // Source materials from the open market (sawmill + quarry + steel mill).
+  const need = MATERIALS_BY_KIND[buildingKind] ?? { lumber: 0, stone: 0, steel: 0 };
+  const matsResult = await sourceMaterials(agent.id, need);
+  if (!matsResult.ok) {
+    await writeEvent({
+      kind: 'construction_materials_short',
+      actor_ids: [agent.id],
+      importance: 4,
+      payload: {
+        building_kind: buildingKind,
+        need,
+        missing: matsResult.missing,
+      },
+    });
+    return { ok: false, reason: 'materials_short' };
+  }
 
   const name = `${agent.name.split(' ')[0]} ${buildingKind.charAt(0).toUpperCase() + buildingKind.slice(1)}`;
   const [building] = await db

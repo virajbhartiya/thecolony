@@ -56,6 +56,10 @@ async function main() {
     { id: 4, key: 'cloth', base_value_cents: 400, perishable: false },
     { id: 5, key: 'tool', base_value_cents: 1200, perishable: false },
     { id: 6, key: 'luxury', base_value_cents: 3000, perishable: false },
+    // construction materials — required by propose_building.
+    { id: 7, key: 'lumber', base_value_cents: 80, perishable: false },
+    { id: 8, key: 'stone', base_value_cents: 60, perishable: false },
+    { id: 9, key: 'steel', base_value_cents: 240, perishable: false },
   ]);
 
   // buildings
@@ -103,6 +107,9 @@ async function main() {
     'town_hall',
     'temple',
     'jail',
+    'precinct',
+    'sawmill',
+    'quarry',
   ]);
   const producing = buildingRows.filter((b) => producingKinds.has(b.kind));
   const companyRows: Array<{

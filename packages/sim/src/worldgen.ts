@@ -36,6 +36,7 @@ const SPRITE_BY_KIND: Record<BuildingKind, string> = {
   factory: 'factory',
   farm: 'farm',
   bar: 'bar',
+  cafe: 'shop',
   restaurant: 'shop',
   office: 'office',
   clinic: 'civic',
@@ -49,6 +50,9 @@ const SPRITE_BY_KIND: Record<BuildingKind, string> = {
   town_hall: 'civic',
   water_works: 'utility',
   power_plant: 'utility',
+  precinct: 'civic',
+  sawmill: 'factory',
+  quarry: 'factory',
 };
 
 export function generateWorld(seed = 42): GeneratedWorld {
@@ -156,6 +160,7 @@ export function generateWorld(seed = 42): GeneratedWorld {
   place('temple', 44, 5, 3, 3, { name: 'Old Temple' });
   place('clinic', 54, 5, 3, 3, { name: 'Riverside Clinic' });
   place('school', 10, 14, 3, 3, { name: 'Northbank School', capacity: 14 });
+  place('precinct', 18, 11, 3, 3, { name: '1st Precinct', capacity: 8 });
 
   // commercial strip
   for (let i = 0; i < 5; i++) {
@@ -190,6 +195,9 @@ export function generateWorld(seed = 42): GeneratedWorld {
   place('factory', 40, 60, 4, 3, { name: 'Cloth Mill' });
   place('water_works', 50, 60, 3, 3, { name: 'Waterworks' });
   place('power_plant', 56, 60, 3, 3, { name: 'Power Plant' });
+  // raw-material industry: lumber + stone for construction
+  place('sawmill', 26, 60, 3, 3, { name: 'Riverside Sawmill', capacity: 6 });
+  place('quarry', 32, 64, 3, 3, { name: 'Greystone Quarry', capacity: 6 });
 
   // farms (NE pre-park)
   place('farm', 62, 14, 4, 3, { name: 'River Farm A' });
@@ -231,6 +239,8 @@ function capacityFor(kind: BuildingKind): number {
       return 6;
     case 'bar':
       return 12;
+    case 'cafe':
+      return 6;
     case 'restaurant':
       return 10;
     case 'office':
@@ -257,6 +267,12 @@ function capacityFor(kind: BuildingKind): number {
       return 4;
     case 'power_plant':
       return 4;
+    case 'precinct':
+      return 8;
+    case 'sawmill':
+      return 6;
+    case 'quarry':
+      return 6;
   }
 }
 

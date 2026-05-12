@@ -387,6 +387,13 @@ export default function CityCanvas({ className }: { className?: string }) {
               .sort((p, q) => p.lp.x + p.lp.y - (q.lp.x + q.lp.y))
               .map(({ a, lp }) => {
                 const { x, y } = tileToWorld(lp.x, lp.y);
+                const occ = (a.occupation ?? '').toLowerCase();
+                const variant: 'child' | 'officer' | 'adult' =
+                  (a.age_years !== undefined && a.age_years < 18) || a.state === 'student' || occ === 'student'
+                    ? 'child'
+                    : occ.includes('officer') || a.state === 'patrolling'
+                    ? 'officer'
+                    : 'adult';
                 return (
                   <AgentSprite
                     key={a.id}
@@ -399,6 +406,7 @@ export default function CityCanvas({ className }: { className?: string }) {
                     selected={selectedAgentId === a.id}
                     wanted={a.state === 'jailed' || a.status === 'jailed'}
                     heat={agentHeatFor(a)}
+                    variant={variant}
                     onClick={() => selectAgent(a.id)}
                     onHover={(h) => setHovered(h ? { kind: 'agent', id: a.id } : null)}
                   />

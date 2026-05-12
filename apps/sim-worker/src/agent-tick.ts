@@ -1079,6 +1079,108 @@ export async function applyAction(
       );
       return;
     }
+    case 'study': {
+      // Find the nearest school. If we're not at one, walk over. If we
+      // already are, settle into student state and write a tiny event so the
+      // news feed picks it up.
+      const school = allBuildings
+        .filter((b) => b.kind === 'school')
+        .sort((a, b) => distanceToAgent(a, agent) - distanceToAgent(b, agent))[0];
+      if (!school) {
+        await db
+          .update(schema.agent)
+          .set({ state: 'idle' })
+          .where(eq(schema.agent.id, agent.id));
+        return;
+      }
+      const atSchool =
+        Math.abs(agent.pos_x - (school.tile_x + 0.5)) < 1.5 &&
+        Math.abs(agent.pos_y - (school.tile_y + 0.5)) < 1.5;
+      if (!atSchool) {
+        await db
+          .update(schema.agent)
+          .set({
+            target_x: school.tile_x + 0.5,
+            target_y: school.tile_y + 0.5,
+            state: 'walking',
+          })
+          .where(eq(schema.agent.id, agent.id));
+        await writeEvent({
+          kind: 'agent_moved',
+          actor_ids: [agent.id],
+          location_id: school.id,
+          importance: 1,
+          payload: { to: school.name, why: 'study' },
+        });
+        return;
+      }
+      await db
+        .update(schema.agent)
+        .set({ state: 'student' })
+        .where(eq(schema.agent.id, agent.id));
+      await writeEvent({
+        kind: 'agent_worked',
+        actor_ids: [agent.id],
+        location_id: school.id,
+        importance: 1,
+        payload: { at: school.name, role: 'student' },
+      });
+      return;
+    }
+    case 'patrol': {
+      // Officers walk a beat near their assigned precinct. If there's a
+      // wanted agent nearby (heuristic already prefers 'accuse' in that case,
+      // but the LLM path may still emit 'patrol'), arrest them.
+      const wanted = await db.execute<{
+        id: string;
+        incident_id: string;
+        charge: string;
+      }>(sql`
+        SELECT a.id, i.id AS incident_id, i.kind AS charge
+        FROM ${schema.agent} a
+        JOIN ${schema.legal_status} l ON l.agent_id = a.id AND COALESCE(l.warrants, 0) > 0
+        LEFT JOIN ${schema.incident} i ON i.perp_id = a.id AND i.resolved = false
+        WHERE a.status = 'alive' AND a.id <> ${agent.id}
+          AND ((a.pos_x - ${agent.pos_x})^2 + (a.pos_y - ${agent.pos_y})^2) < 36
+        ORDER BY ((a.pos_x - ${agent.pos_x})^2 + (a.pos_y - ${agent.pos_y})^2) ASC
+        LIMIT 1
+      `);
+      if (wanted[0]) {
+        await accuseAgent(
+          agent.id,
+          wanted[0].id,
+          wanted[0].charge ?? 'outstanding warrant',
+          wanted[0].incident_id ?? null,
+        );
+        return;
+      }
+      const precinct = allBuildings
+        .filter((b) => b.kind === 'precinct')
+        .sort((a, b) => distanceToAgent(a, agent) - distanceToAgent(b, agent))[0];
+      // Random walk: precinct ± 6 tiles, clamped by movement layer.
+      const seed = hashStringSeed(`patrol:${agent.id}:${Date.now()}`);
+      const rng = mulberry32(seed);
+      const cx = precinct ? precinct.tile_x : Math.round(agent.pos_x);
+      const cy = precinct ? precinct.tile_y : Math.round(agent.pos_y);
+      const tx = cx + Math.floor((rng() - 0.5) * 12);
+      const ty = cy + Math.floor((rng() - 0.5) * 12);
+      await db
+        .update(schema.agent)
+        .set({
+          target_x: tx + 0.5,
+          target_y: ty + 0.5,
+          state: 'patrolling',
+        })
+        .where(eq(schema.agent.id, agent.id));
+      await writeEvent({
+        kind: 'officer_patrolled',
+        actor_ids: [agent.id],
+        location_id: precinct?.id ?? null,
+        importance: 2,
+        payload: { tile_x: tx, tile_y: ty },
+      });
+      return;
+    }
     default:
       // unimplemented v1 actions degrade to idle
       await db.update(schema.agent).set({ state: 'idle' }).where(eq(schema.agent.id, agent.id));
@@ -1138,6 +1240,12 @@ function workplaceKindsForIndustry(industry: string): string[] {
       return ['water_works'];
     case 'power_plant':
       return ['power_plant'];
+    case 'precinct':
+      return ['precinct'];
+    case 'sawmill':
+      return ['sawmill', 'factory'];
+    case 'quarry':
+      return ['quarry', 'factory'];
     default:
       return ['office', 'shop', 'factory'];
   }

@@ -232,6 +232,10 @@ function primaryItemFor(industry: string): number | null {
       return 6; // luxury
     case 'construction_yard':
       return 5; // tools
+    case 'sawmill':
+      return 7; // lumber
+    case 'quarry':
+      return 8; // stone
     default:
       return null;
   }

@@ -89,6 +89,12 @@ export function roleForIndustry(industry: string | null | undefined): string {
     case 'water_works':
     case 'power_plant':
       return 'engineer';
+    case 'precinct':
+      return 'officer';
+    case 'sawmill':
+      return 'sawyer';
+    case 'quarry':
+      return 'quarryman';
     default:
       return 'worker';
   }
@@ -105,6 +111,9 @@ export function wageForRole(role: string): number {
   if (normalized.includes('chef')) return 2000;
   if (normalized.includes('guard')) return 2000;
   if (normalized.includes('civil')) return 2000;
+  if (normalized.includes('officer')) return 2100;
+  if (normalized.includes('sawyer')) return 1700;
+  if (normalized.includes('quarry')) return 1800;
   if (normalized.includes('teacher')) return 1900;
   if (normalized.includes('reporter')) return 1800;
   if (normalized.includes('bartender')) return 1900;

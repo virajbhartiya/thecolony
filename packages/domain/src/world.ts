@@ -17,6 +17,7 @@ export const BuildingKind = z.enum([
   'factory',
   'farm',
   'bar',
+  'cafe',
   'restaurant',
   'office',
   'clinic',
@@ -30,6 +31,9 @@ export const BuildingKind = z.enum([
   'town_hall',
   'water_works',
   'power_plant',
+  'precinct',
+  'sawmill',
+  'quarry',
 ]);
 export type BuildingKind = z.infer<typeof BuildingKind>;
 
@@ -82,6 +86,7 @@ export const WorldSnapshotSchema = z.object({
       occupation: z.string().nullable(),
       balance_cents: z.number().int(),
       portrait_seed: z.string(),
+      age_years: z.number().int().optional(),
     }),
   ),
 });

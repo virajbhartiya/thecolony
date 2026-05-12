@@ -41,6 +41,7 @@ export async function registerWorldRoutes(app: FastifyInstance) {
         occupation: schema.agent.occupation,
         balance_cents: schema.agent.balance_cents,
         portrait_seed: schema.agent.portrait_seed,
+        age_years: schema.agent.age_years,
       })
       .from(schema.agent)
       .where(sql`status <> 'dead'`);
