@@ -1,202 +1,355 @@
 'use client';
+import { useEffect, useState, useMemo } from 'react';
 import { useWorld } from '../lib/store';
+import { fetchEndpoint } from '../lib/api';
 
-const KIND_LABEL: Record<string, { label: string; tone: string }> = {
-  agent_died: { label: 'death', tone: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
-  agent_bankrupt: { label: 'bankrupt', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  agent_evicted: { label: 'evicted', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  agent_homed: {
-    label: 'housing',
-    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
-  },
-  agent_hired: { label: 'hired', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
-  agent_fired: { label: 'fired', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
-  agent_paid_wage: {
-    label: 'wage',
-    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
-  },
-  agent_paid_rent: { label: 'rent', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  agent_paid_tax: { label: 'tax', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
-  agent_spoke: { label: 'speech', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
-  agent_ate: { label: 'food', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
-  agent_slept: { label: 'sleep', tone: 'text-zinc-400 border-zinc-600/30 bg-white/[0.03]' },
-  agent_moved: { label: 'move', tone: 'text-zinc-500 border-zinc-700/30 bg-white/[0.02]' },
-  agent_commuted: { label: 'commute', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
-  agent_worked: { label: 'work', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
-  job_posted: { label: 'jobs', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
-  company_founded: { label: 'company', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
-  shares_issued: { label: 'shares', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
-  order_placed: { label: 'order', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  trade_executed: {
-    label: 'trade',
-    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
-  },
-  agent_spawned: {
-    label: 'born',
-    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
-  },
-  migrant_arrived: {
-    label: 'migrant',
-    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
-  },
-  birth: { label: 'birth', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
-  incident_theft: { label: 'theft', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
-  incident_assault: { label: 'assault', tone: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
-  incident_fraud: { label: 'fraud', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  incident_breach: { label: 'breach', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  incident_witnessed: { label: 'witness', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
-  agent_accused: { label: 'accused', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  court_verdict: { label: 'court', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
-  bounty_paid: {
-    label: 'bounty',
-    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
-  },
-  agent_jailed: { label: 'jailed', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
-  agent_released: {
-    label: 'released',
-    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
-  },
-  group_founded: { label: 'group', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
-  group_joined: { label: 'joined', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
-  group_left: { label: 'left', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
-  news_headline: { label: 'news', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
-  city_founded: { label: 'civic', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
-  city_tax_collected: { label: 'taxes', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
-  city_aid_paid: { label: 'aid', tone: 'text-blue-300 border-blue-500/30 bg-blue-500/10' },
-  vote_cast: { label: 'vote', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
-  mayor_elected: { label: 'mayor', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
+const KIND_COLOR: Record<string, string> = {
+  agent_died: '#8e2738',
+  incident_theft: '#e2536e',
+  incident_assault: '#e2536e',
+  incident_fraud: '#f0a347',
+  incident_breach: '#f0a347',
+  agent_fired: '#e2536e',
+  agent_evicted: '#f0a347',
+  agent_bankrupt: '#9b7fd1',
+  agent_jailed: '#e2536e',
+  agent_released: '#95b876',
+  agent_homed: '#95b876',
+  agent_hired: '#95b876',
+  agent_spoke: '#ffc26b',
+  agent_dm: '#ffc26b',
+  agent_broadcast: '#f0a347',
+  agent_paid_wage: '#95b876',
+  agent_paid_rent: '#cdb98a',
+  agent_ate: '#cdb98a',
+  agent_bought: '#95b876',
+  agent_sold: '#cdb98a',
+  agent_worked: '#cdb98a',
+  agent_moved: '#5e5868',
+  agent_slept: '#5e5868',
+  agent_reflected: '#9b7fd1',
+  agent_accused: '#9b7fd1',
+  trade_executed: '#95b876',
+  order_placed: '#f0c84a',
+  birth: '#95b876',
+  migrant_arrived: '#95b876',
+  group_founded: '#9b7fd1',
+  group_joined: '#9b7fd1',
+  group_left: '#5e5868',
+  company_founded: '#4ec5b8',
+  shares_issued: '#4ec5b8',
+  news_headline: '#58a6ff',
 };
+
+interface LeaderRow {
+  id: string;
+  name: string;
+  occupation?: string | null;
+  balance_cents?: number;
+  score?: number;
+  warrants?: number;
+}
+
+interface Leaderboards {
+  richest: LeaderRow[];
+  loved: LeaderRow[];
+  hated: LeaderRow[];
+  notorious: LeaderRow[];
+}
+
+function fmtMoney(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  const v = Math.abs(cents) / 100;
+  if (v >= 1_000_000) return `${sign}$${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1000) return `${sign}$${(v / 1000).toFixed(1)}k`;
+  return `${sign}$${v.toFixed(0)}`;
+}
+
+function timeOf(t: string): string {
+  const d = new Date(t);
+  return Number.isNaN(d.getTime())
+    ? '--:--'
+    : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
 
 export default function EventTicker() {
   const events = useWorld((s) => s.events);
   const agents = useWorld((s) => s.agents);
+  const buildings = useWorld((s) => s.buildings);
   const select = useWorld((s) => s.selectAgent);
+  const selectBuilding = useWorld((s) => s.selectBuilding);
 
-  const visible = events.filter((e) => KIND_LABEL[e.kind]?.label && e.importance >= 1).slice(0, 60);
+  const visible = useMemo(() => events.filter((e) => e.importance >= 1).slice(0, 18), [events]);
+
+  const agentName = (id: string) => agents.get(id)?.name ?? id.slice(0, 6);
+  const buildingName = (id: string | null) =>
+    buildings.find((b) => b.id === id)?.name ?? '';
+
+  const [leaderboards, setLeaderboards] = useState<Leaderboards | null>(null);
+  useEffect(() => {
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const r = await fetchEndpoint<Leaderboards>('/v1/leaderboards');
+        if (!stopped) setLeaderboards(r);
+      } catch {
+        /* ignore */
+      }
+    };
+    tick();
+    const id = setInterval(tick, 15_000);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, []);
 
   return (
-    <div className="panel pointer-events-auto absolute bottom-4 right-4 top-4 hidden w-[340px] flex-col lg:flex">
-      <div className="panel-header px-4 py-3">
-        <span className="panel-title">city record</span>
-        <span className="panel-tag">{visible.length} events</span>
+    <div
+      className="panel"
+      style={{
+        position: 'absolute',
+        top: 88,
+        right: 16,
+        width: 340,
+        bottom: 88,
+        display: 'flex',
+        flexDirection: 'column',
+        zIndex: 20,
+      }}
+    >
+      <div className="panel-header">
+        <span className="panel-title">▌ LIVE FIREHOSE</span>
+        <span className="panel-tag">{events.length} EVENTS</span>
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div style={{ overflowY: 'auto', maxHeight: '58%', flex: '0 0 auto' }}>
         {visible.length === 0 && (
-          <div className="text-xs text-zinc-500 px-2 py-4">
+          <div style={{ padding: '14px 12px', fontSize: 12, color: '#5e5868' }}>
             No events yet. The city is waking up.
           </div>
         )}
-        {visible.map((e) => {
-          const meta = KIND_LABEL[e.kind] ?? { label: e.kind, tone: 'text-zinc-400' };
-          const actor = agents.get(e.actor_ids[0] ?? '');
-          const actorName =
-            civicActor(e.kind) !== 'unknown' ? civicActor(e.kind) : (actor?.name ?? 'unknown');
-          const detail = describeEvent(e);
+        {visible.map((e, i) => {
+          const actor = agentName(e.actor_ids[0] ?? '');
+          const placeName = buildingName(e.location_id);
           return (
-            <button
-              key={e.id}
-              onClick={() => actor && select(actor.id)}
-              className="w-full border-b border-dashed border-[var(--line-soft)] px-3 py-2 text-left transition-colors hover:bg-[var(--ink-3)]"
-            >
-              <span className="flex items-start gap-2">
-                <span
-                  className={`shrink-0 border px-1.5 py-0.5 text-[10px] uppercase ${meta.tone}`}
+            <div key={e.id} className={`event-row ${i === 0 ? 'new' : ''}`}>
+              <span className="t mono">{timeOf(e.t)}</span>
+              <span className="dot" style={{ background: KIND_COLOR[e.kind] ?? '#8a8478' }} />
+              <span className="body">
+                <strong
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => e.actor_ids[0] && select(e.actor_ids[0])}
                 >
-                  {meta.label}
-                </span>
-                <span className="min-w-0 text-xs leading-snug text-[var(--cream-dim)]">
-                  <span className="font-medium text-[var(--cream)]">{actorName}</span>
-                  {detail && <span className="text-[var(--mute)]"> - {detail}</span>}
-                </span>
+                  {actor}
+                </strong>{' '}
+                <span style={{ color: '#8a8478' }}>{summarize(e.kind)}</span>
+                {placeName && (
+                  <>
+                    {' '}
+                    <span
+                      style={{ color: '#4ec5b8', cursor: 'pointer', textDecoration: 'underline dotted' }}
+                      onClick={() => e.location_id && selectBuilding(e.location_id)}
+                    >
+                      {placeName}
+                    </span>
+                  </>
+                )}
+                <DetailBlurb e={e} agentName={agentName} />
               </span>
-            </button>
+            </div>
           );
         })}
+      </div>
+
+      <div style={{ borderTop: '1px solid #3a304a', flex: 1, overflowY: 'auto' }}>
+        <Leaderboard
+          title="Richest"
+          tag="net worth"
+          rows={
+            leaderboards?.richest.slice(0, 5).map((r) => ({
+              id: r.id,
+              name: r.name,
+              v: fmtMoney(r.balance_cents ?? 0),
+              accent: '#95b876',
+            })) ?? []
+          }
+          onPick={select}
+        />
+        <Leaderboard
+          title="Most Loved"
+          tag="aggregate affinity"
+          rows={
+            leaderboards?.loved.slice(0, 5).map((r) => ({
+              id: r.id,
+              name: r.name,
+              v: `+${r.score ?? 0}`,
+              accent: '#95b876',
+            })) ?? []
+          }
+          onPick={select}
+        />
+        <Leaderboard
+          title="Most Hated"
+          tag="aggregate affinity"
+          rows={
+            leaderboards?.hated.slice(0, 5).map((r) => ({
+              id: r.id,
+              name: r.name,
+              v: `${r.score ?? 0}`,
+              accent: '#e2536e',
+            })) ?? []
+          }
+          onPick={select}
+        />
+        <Leaderboard
+          title="Most Notorious"
+          tag="warrants"
+          rows={
+            leaderboards?.notorious.slice(0, 5).map((r) => ({
+              id: r.id,
+              name: r.name,
+              v: `${r.warrants ?? 0}`,
+              accent: '#9b7fd1',
+            })) ?? []
+          }
+          onPick={select}
+        />
       </div>
     </div>
   );
 }
 
-function describeEvent(e: { kind: string; payload: Record<string, unknown> }): string {
-  const p = e.payload ?? {};
-  switch (e.kind) {
-    case 'agent_spoke':
-      return `"${String(p.body ?? '').slice(0, 80)}"`;
-    case 'agent_died':
-      return `cause: ${String(p.cause ?? 'unknown')}`;
-    case 'agent_bankrupt':
-      return `debts exceeded survival cash`;
-    case 'birth':
-      return `${String(p.name ?? 'new citizen')}`;
-    case 'agent_paid_wage':
-      return `+$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)}`;
-    case 'agent_paid_rent':
-      return `-$${(Number(p.rent ?? 0) / 100).toFixed(0)}`;
-    case 'city_tax_collected':
-      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} from ${String(p.taxpayer_count ?? 0)} taxpayers`;
-    case 'city_aid_paid':
-      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} for ${String(p.reason ?? 'aid')}`;
-    case 'vote_cast':
-      return `voted for ${String(p.candidate ?? 'candidate')} on ${String(p.reason ?? 'policy')}`;
-    case 'mayor_elected':
-      return `${String(p.mayor_name ?? 'unknown')} won ${String(p.votes ?? '?')} votes`;
-    case 'city_founded':
-      return `mayor ${String(p.mayor_name ?? 'unseated')}, tax ${(Number(p.tax_rate_bps ?? 0) / 100).toFixed(1)}%`;
-    case 'agent_hired':
-      return `as ${String(p.role ?? 'worker')} at ${String(p.company ?? 'a company')}`;
-    case 'agent_commuted':
-      return `${String(p.role ?? 'worker')} to ${String(p.building ?? p.company ?? 'work')}`;
-    case 'agent_worked':
-      return `${String(p.role ?? 'worker')} at ${String(p.company ?? 'company')}`;
-    case 'agent_fired':
-      return `${String(p.role ?? 'worker')} from ${String(p.company ?? 'a company')}`;
-    case 'job_posted':
-      return `${String(p.company ?? 'company')} needs ${String(p.openings ?? '?')} ${String(p.role ?? 'worker')}`;
-    case 'company_founded':
-      return `${String(p.name ?? 'company')} by ${String(p.founder ?? 'founder')}`;
-    case 'shares_issued':
-      return `${String(p.ticker ?? p.company ?? 'company')} ${String(p.shares ?? '?')} shares`;
-    case 'order_placed':
-      return `${String(p.side ?? 'order')} ${String(p.ticker ?? p.asset ?? 'shares')} $${(Number(p.price_cents ?? 0) / 100).toFixed(2)} x ${String(p.qty ?? '?')}`;
-    case 'trade_executed':
-      return `${String(p.ticker ?? p.asset ?? 'shares')} $${(Number(p.price_cents ?? 0) / 100).toFixed(2)} x ${String(p.qty ?? '?')}`;
-    case 'incident_theft':
-      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} stolen`;
-    case 'incident_assault':
-      return `severity ${String(p.severity ?? '?')}`;
-    case 'incident_fraud':
-      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} fraud`;
-    case 'incident_breach':
-      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} breach`;
-    case 'incident_witnessed':
-      return `${String(p.charge ?? 'case')} reported nearby`;
-    case 'agent_accused':
-      return `charged with ${String(p.charge ?? 'case')}`;
-    case 'court_verdict':
-      return `${p.guilty ? 'guilty' : 'not guilty'} on ${String(p.charge ?? 'case')}`;
-    case 'bounty_paid':
-      return `$${(Number(p.amount_cents ?? 0) / 100).toFixed(0)} for the arrest`;
-    case 'agent_jailed':
-      return `${String(p.charge ?? 'case')} until ${p.jail_until ? new Date(String(p.jail_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'release'}`;
-    case 'agent_released':
-      return `parole until ${p.parole_until ? new Date(String(p.parole_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'later'}`;
-    case 'group_founded':
-      return `${String(p.name ?? 'group')} (${String(p.kind ?? 'faction')})`;
-    case 'group_joined':
-      return `${String(p.name ?? 'group')}`;
-    case 'group_left':
-      return `${String(p.name ?? 'group')}`;
-    case 'news_headline':
-      return String(p.title ?? 'daily report published');
-    case 'agent_moved':
-      return `to ${String(p.to ?? '...')}`;
-    case 'agent_homed':
-      return `at ${String(p.building ?? '...')}`;
-    default:
-      return '';
-  }
+function Leaderboard({
+  title,
+  tag,
+  rows,
+  onPick,
+}: {
+  title: string;
+  tag: string;
+  rows: Array<{ id: string; name: string; v: string; accent: string }>;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div style={{ padding: '10px 12px', borderBottom: '1px solid #2a2236' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 6,
+        }}
+      >
+        <span className="panel-title" style={{ color: '#ece6d3' }}>
+          {title}
+        </span>
+        <span className="panel-tag">{tag}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', rowGap: 3 }}>
+        {rows.length === 0 && (
+          <span className="mono" style={{ fontSize: 11, color: '#5e5868' }}>
+            loading…
+          </span>
+        )}
+        {rows.map((r, i) => (
+          <span key={r.id + i} style={{ display: 'contents' }}>
+            <span
+              onClick={() => onPick(r.id)}
+              style={{ cursor: 'pointer', fontSize: 12, color: '#ece6d3' }}
+            >
+              <span className="mono" style={{ color: '#5e5868', marginRight: 6 }}>
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              {r.name}
+            </span>
+            <span className="mono" style={{ fontSize: 11, color: r.accent }}>
+              {r.v}
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
 }
 
-function civicActor(kind: string): string {
-  return kind.startsWith('city_') || kind === 'mayor_elected' ? 'City Hall' : 'unknown';
+function summarize(kind: string): string {
+  const map: Record<string, string> = {
+    agent_died: 'died',
+    incident_theft: 'stole from',
+    incident_assault: 'assaulted',
+    incident_fraud: 'defrauded',
+    incident_breach: 'breached contract with',
+    agent_fired: 'was fired',
+    agent_evicted: 'evicted',
+    agent_bankrupt: 'went bankrupt',
+    agent_jailed: 'jailed',
+    agent_released: 'released',
+    agent_homed: 'moved into',
+    agent_hired: 'hired at',
+    agent_spoke: 'said:',
+    agent_dm: 'dm’d',
+    agent_broadcast: 'broadcast:',
+    agent_paid_wage: 'received wage at',
+    agent_paid_rent: 'paid rent at',
+    agent_ate: 'ate',
+    agent_bought: 'bought at',
+    agent_sold: 'sold at',
+    agent_worked: 'worked at',
+    agent_moved: 'moved to',
+    agent_slept: 'slept',
+    agent_reflected: 'reflected',
+    agent_accused: 'accused',
+    trade_executed: 'traded',
+    order_placed: 'placed order',
+    birth: 'born',
+    migrant_arrived: 'arrived',
+    group_founded: 'founded',
+    group_joined: 'joined',
+    group_left: 'left',
+    company_founded: 'founded company',
+    shares_issued: 'issued shares',
+    news_headline: '— news:',
+  };
+  return map[kind] ?? kind;
+}
+
+function DetailBlurb({
+  e,
+  agentName,
+}: {
+  e: { kind: string; payload: Record<string, unknown>; actor_ids: string[] };
+  agentName: (id: string) => string;
+}) {
+  const p = e.payload ?? {};
+  if (e.kind === 'agent_spoke' || e.kind === 'agent_broadcast') {
+    const body = String(p.body ?? '').slice(0, 100);
+    if (!body) return null;
+    return <span style={{ color: '#cdb98a' }}> “{body}”</span>;
+  }
+  if (e.kind === 'agent_paid_wage' || e.kind === 'agent_paid_rent') {
+    const amt = Number(p.amount_cents ?? p.rent ?? 0) / 100;
+    return <span style={{ color: '#95b876' }}> · ${amt.toFixed(0)}</span>;
+  }
+  if (e.kind === 'incident_theft') {
+    const amt = Number(p.amount_cents ?? 0) / 100;
+    return (
+      <span style={{ color: '#e2536e' }}>
+        {' '}
+        · ${amt.toFixed(0)}
+        {e.actor_ids[1] && (
+          <>
+            {' '}
+            <span style={{ color: '#cdb98a' }}>from {agentName(e.actor_ids[1])}</span>
+          </>
+        )}
+      </span>
+    );
+  }
+  if (e.kind === 'agent_died') {
+    return <span style={{ color: '#e2536e' }}> · {String(p.cause ?? 'unknown')}</span>;
+  }
+  if (e.kind === 'agent_hired') {
+    return <span style={{ color: '#95b876' }}> as {String(p.role ?? 'worker')}</span>;
+  }
+  return null;
 }

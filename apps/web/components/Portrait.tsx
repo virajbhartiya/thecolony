@@ -1,52 +1,38 @@
 'use client';
-import { useMemo } from 'react';
-
-function hashSeed(s: string): number[] {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-  }
-  const out: number[] = [];
-  let x = h >>> 0;
-  for (let i = 0; i < 8; i++) {
-    x = (x * 1103515245 + 12345) >>> 0;
-    out.push(x % 256);
-  }
-  return out;
-}
-
-const SKIN = ['#f5d6a0', '#e1b58b', '#c89a76', '#a07a5a', '#6e4e36'];
-const HAIR = ['#1b1b1b', '#3a261c', '#5c3a1e', '#806033', '#b07a2a', '#c1c1c1', '#5a4470'];
-const SHIRT = ['#7e85e0', '#7ee787', '#e07e9c', '#e0c87e', '#7eafe0', '#b07ee0', '#888'];
+import { agentLook } from '../lib/sprite-helpers';
 
 export default function Portrait({ seed, size = 64 }: { seed: string; size?: number }) {
-  const colors = useMemo(() => {
-    const h = hashSeed(seed);
-    return {
-      skin: SKIN[h[0]! % SKIN.length],
-      hair: HAIR[h[1]! % HAIR.length],
-      shirt: SHIRT[h[2]! % SHIRT.length],
-      eye: h[3]! % 2 === 0 ? '#1b1b1b' : '#3a261c',
-      hairStyle: h[4]! % 3, // 0 short, 1 long, 2 buzz
-      bg: `hsl(${h[5]! % 360}, 30%, 16%)`,
-    };
-  }, [seed]);
-
+  const look = agentLook(seed);
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" className="rounded-md">
-      <rect width="64" height="64" fill={colors.bg} />
-      <ellipse cx="32" cy="58" rx="26" ry="12" fill={colors.shirt} />
-      <circle cx="32" cy="30" r="14" fill={colors.skin} />
-      {colors.hairStyle === 0 && (
-        <path d="M18 28 Q18 14 32 14 Q46 14 46 28 L46 22 Q32 18 18 22 Z" fill={colors.hair} />
-      )}
-      {colors.hairStyle === 1 && (
-        <path d="M16 32 Q16 12 32 12 Q48 12 48 32 L48 24 Q32 16 16 24 Z M16 32 L18 46 L20 36 Z M48 32 L46 46 L44 36 Z" fill={colors.hair} />
-      )}
-      {colors.hairStyle === 2 && <path d="M20 22 Q32 16 44 22 L44 20 Q32 14 20 20 Z" fill={colors.hair} />}
-      <circle cx="27" cy="30" r="1.5" fill={colors.eye} />
-      <circle cx="37" cy="30" r="1.5" fill={colors.eye} />
-      <path d="M28 36 Q32 38 36 36" stroke="#5c3322" strokeWidth="1.2" fill="none" strokeLinecap="round" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      style={{
+        imageRendering: 'pixelated',
+        background: '#1c1925',
+        border: '1px solid #3a304a',
+        display: 'block',
+      }}
+    >
+      <defs>
+        <linearGradient id={`pg-${seed}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#2a2236" />
+          <stop offset="1" stopColor="#0b0a10" />
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="32" height="32" fill={`url(#pg-${seed})`} />
+      <rect x="6" y="22" width="20" height="10" fill={look.shirt} />
+      <rect x="7" y="24" width="18" height="1" fill="#0b0a10" opacity="0.4" />
+      <rect x="14" y="18" width="4" height="4" fill={look.skin} />
+      <rect x="10" y="10" width="12" height="10" fill={look.skin} />
+      <rect x="9" y="8" width="14" height="4" fill={look.hair} />
+      <rect x="9" y="12" width="2" height="3" fill={look.hair} />
+      <rect x="21" y="12" width="2" height="3" fill={look.hair} />
+      <rect x="12" y="14" width="2" height="2" fill="#0b0a10" />
+      <rect x="18" y="14" width="2" height="2" fill="#0b0a10" />
+      <rect x="13" y="18" width="6" height="1" fill="#0b0a10" />
+      <rect x="11" y="11" width="1" height="1" fill="#fff" opacity="0.25" />
     </svg>
   );
 }

@@ -1,23 +1,24 @@
 'use client';
-import dynamic from 'next/dynamic';
 import { useEffect, useState } from 'react';
 import { fetchEvents, fetchSnapshot } from '../lib/api';
 import { mergeSnapshotAgents, useWorld } from '../lib/store';
 import { useWorldStream } from '../lib/ws';
+import CityCanvas from '../components/CityCanvas';
 import HUD from '../components/HUD';
 import EventTicker from '../components/EventTicker';
-
-const CityCanvas = dynamic(() => import('../components/CityCanvas'), {
-  loading: () => <CityLoading />,
-});
-const AgentDrawer = dynamic(() => import('../components/AgentDrawer'));
-const BuildingDrawer = dynamic(() => import('../components/BuildingDrawer'));
+import BottomBar from '../components/BottomBar';
+import AgentDrawer from '../components/AgentDrawer';
+import BuildingDrawer from '../components/BuildingDrawer';
 
 export default function Home() {
   const loadSnapshot = useWorld((s) => s.loadSnapshot);
   const loadEvents = useWorld((s) => s.loadEvents);
   const selectedAgentId = useWorld((s) => s.selectedAgentId);
   const selectedBuildingId = useWorld((s) => s.selectedBuildingId);
+  const tourMode = useWorld((s) => s.tourMode);
+  const events = useWorld((s) => s.events);
+  const selectAgent = useWorld((s) => s.selectAgent);
+  const selectBuilding = useWorld((s) => s.selectBuilding);
   const [error, setError] = useState<string | null>(null);
   const [bootstrapped, setBootstrapped] = useState(false);
 
@@ -52,38 +53,63 @@ export default function Home() {
     };
   }, [loadSnapshot, loadEvents, bootstrapped]);
 
+  // Tour mode — every 8s, jump selection to the most important recent event.
+  useEffect(() => {
+    if (!tourMode) return;
+    const id = setInterval(() => {
+      const hot = events.find((e) => e.importance >= 6);
+      if (!hot) return;
+      if (hot.actor_ids[0]) selectAgent(hot.actor_ids[0]);
+      else if (hot.location_id) selectBuilding(hot.location_id);
+    }, 8000);
+    return () => clearInterval(id);
+  }, [tourMode, events, selectAgent, selectBuilding]);
+
   return (
-    <main className="relative w-screen h-screen overflow-hidden">
-      <CityCanvas className="absolute inset-0" />
+    <main style={{ position: 'fixed', inset: 0, background: '#0b0a10', overflow: 'hidden' }}>
+      <CityCanvas />
       <div className="scanlines" />
       <HUD />
       <EventTicker />
+      <BottomBar />
       {selectedAgentId && <AgentDrawer />}
       {selectedBuildingId && <BuildingDrawer />}
+
+      <div
+        className="mono"
+        style={{
+          position: 'absolute',
+          left: 16,
+          bottom: 80,
+          fontSize: 10,
+          color: '#5e5868',
+          background: 'rgba(11,10,16,0.7)',
+          border: '1px solid #2a2236',
+          padding: '4px 8px',
+          zIndex: 15,
+        }}
+      >
+        DRAG · pan &nbsp; SCROLL · zoom &nbsp; CLICK · dossier &nbsp; F · follow
+      </div>
+
       {error && !bootstrapped && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center">
-          <div className="panel p-6 max-w-md text-center">
-            <h2 className="text-lg font-medium mb-2">Can't reach the city.</h2>
-            <p className="text-sm text-zinc-400">
-              The API is at <code className="text-zinc-200">{process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:3001'}</code>.<br />
-              Check that <code className="text-zinc-200">docker compose up</code> and{' '}
-              <code className="text-zinc-200">pnpm dev</code> are running.
+        <div style={{ position: 'absolute', inset: 0, zIndex: 50, display: 'grid', placeItems: 'center' }}>
+          <div className="panel" style={{ padding: '20px 24px', maxWidth: 420, textAlign: 'center' }}>
+            <div className="panel-title" style={{ marginBottom: 8 }}>
+              Can't reach the city.
+            </div>
+            <p style={{ fontSize: 12, color: '#cdb98a' }}>
+              API:{' '}
+              <code className="mono" style={{ color: '#ffc26b' }}>
+                {process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:4001'}
+              </code>
             </p>
-            <p className="text-xs text-zinc-500 mt-3">{error}</p>
+            <p className="mono" style={{ fontSize: 10, color: '#5e5868', marginTop: 8 }}>
+              {error}
+            </p>
           </div>
         </div>
       )}
     </main>
-  );
-}
-
-function CityLoading() {
-  return (
-    <div className="city-loading absolute inset-0 grid place-items-center">
-      <div className="panel px-5 py-4 text-center">
-        <div className="panel-title">TheColony</div>
-        <div className="mt-2 text-xs text-[var(--mute)]">loading city renderer</div>
-      </div>
-    </div>
   );
 }

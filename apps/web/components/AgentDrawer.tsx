@@ -1,6 +1,5 @@
 'use client';
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useWorld } from '../lib/store';
 import { fetchAgent } from '../lib/api';
 import Portrait from './Portrait';
@@ -11,7 +10,7 @@ interface AgentDetail {
     name: string;
     age_years: number;
     balance_cents: number;
-    status: string;
+    status: 'alive' | 'jailed' | 'bankrupt' | 'dead';
     state: string;
     occupation: string | null;
     needs: {
@@ -26,44 +25,49 @@ interface AgentDetail {
     pos_x: number;
     pos_y: number;
   };
-  employer: { id: string; name: string; industry: string | null; treasury_cents: number } | null;
   job: {
-    id: string;
     role: string;
     wage_cents: number;
-    company_id: string;
     company: string;
     industry: string | null;
-    building_id: string | null;
     building: string | null;
-    zone_kind: string | null;
   } | null;
   home: { id: string; name: string; kind: string; rent_cents: number } | null;
   inventory: Array<{ key: string; qty: number }>;
   holdings: Array<{
-    company_id: string;
     company: string;
     ticker: string | null;
     shares: number;
+    last_price_cents: number | null;
     market_value_cents: number | null;
   }>;
-  votes: Array<{ election_id: string; candidate_id: string; reason: string; t: string }>;
   recentEvents: Array<{ id: number; t: string; kind: string; payload: Record<string, unknown> }>;
   memories: Array<{ id: number; t: string; kind: string; summary: string; salience: number }>;
-  relationships: Array<{
-    subj_id: string;
-    obj_id: string;
-    affinity: number;
-    trust: number;
-    tags: string[] | null;
-  }>;
+  relationships: Array<{ subj_id: string; obj_id: string; affinity: number; trust: number; tags: string[] | null }>;
 }
+
+function fmtMoney(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  const v = Math.abs(cents) / 100;
+  if (v >= 1_000_000) return `${sign}$${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1000) return `${sign}$${(v / 1000).toFixed(1)}k`;
+  return `${sign}$${v.toFixed(0)}`;
+}
+
+const PILL_BY_STATUS: Record<string, string> = {
+  alive: 'alive',
+  jailed: 'jailed',
+  bankrupt: 'bankrupt',
+  dead: 'dead',
+};
 
 export default function AgentDrawer() {
   const id = useWorld((s) => s.selectedAgentId);
-  const select = useWorld((s) => s.selectAgent);
-  const follow = useWorld((s) => s.toggleFollow);
+  const close = useWorld((s) => s.selectAgent);
+  const toggleFollow = useWorld((s) => s.toggleFollow);
   const isFollow = useWorld((s) => s.followAgentId === id);
+  const agents = useWorld((s) => s.agents);
+  const live = id ? agents.get(id) : null;
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -71,306 +75,367 @@ export default function AgentDrawer() {
     if (!id) return;
     setDetail(null);
     setLoading(true);
-    fetchAgent(id)
-      .then((d) => setDetail(d))
-      .catch(() => setDetail(null))
-      .finally(() => setLoading(false));
+    const tick = () =>
+      fetchAgent(id)
+        .then((d) => setDetail(d))
+        .catch(() => setDetail(null))
+        .finally(() => setLoading(false));
+    tick();
+    const t = setInterval(tick, 4000);
+    return () => clearInterval(t);
   }, [id]);
 
   if (!id) return null;
 
+  const d = detail;
+  const balance = d?.agent.balance_cents ?? live?.balance_cents ?? 0;
+  const state = d?.agent.state ?? live?.state ?? '—';
+  const status = d?.agent.status ?? (live?.status as AgentDetail['agent']['status']) ?? 'alive';
+  const occupation = d?.agent.occupation ?? live?.occupation ?? 'unemployed';
+  const portraitSeed = d?.agent.portrait_seed ?? live?.portrait_seed ?? '';
+  const name = d?.agent.name ?? live?.name ?? '…';
+
   return (
-    <div className="drawer-panel pointer-events-auto absolute bottom-3 left-3 right-3 top-28 z-20 flex flex-col overflow-hidden sm:left-4 sm:right-auto sm:top-24 sm:w-[390px] lg:bottom-4">
-      <header className="panel-header flex items-start gap-3 p-4">
-        {detail ? (
-          <Portrait seed={detail.agent.portrait_seed} size={56} />
-        ) : (
-          <div className="w-14 h-14 bg-white/5 rounded-md animate-pulse" />
-        )}
-        <div className="flex-1 min-w-0">
-          <h2 className="text-base font-medium truncate">{detail?.agent.name ?? '…'}</h2>
-          <p className="text-xs text-zinc-400">
-            {detail
-              ? `age ${detail.agent.age_years} · ${detail.agent.occupation ?? 'unemployed'}`
-              : 'loading…'}
-          </p>
-          {detail && (
-            <p className="text-xs text-zinc-400 mt-0.5">
-              <span className="text-zinc-300 font-medium">
-                ${(detail.agent.balance_cents / 100).toFixed(0)}
-              </span>{' '}
-              · state: {detail.agent.state}
-            </p>
-          )}
-        </div>
-        <button
-          onClick={() => select(null)}
-          className="border border-[var(--line)] bg-[var(--ink-2)] px-2 py-1 text-sm text-[var(--cream-dim)] transition-colors hover:bg-[var(--ink-3)] hover:text-[var(--amber-2)]"
-          aria-label="Close"
-        >
-          ✕
-        </button>
-      </header>
-      {detail && (
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+    <div className="drawer">
+      <div className="panel-header">
+        <span className="panel-title">▌ AGENT DOSSIER</span>
+        <div style={{ display: 'flex', gap: 6 }}>
           <button
-            onClick={() => follow(id)}
-            className={`w-full border px-3 py-1.5 text-xs uppercase ${
-              isFollow
-                ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
-                : 'border-white/10 hover:bg-white/5'
-            }`}
+            className="iconbtn"
+            title="Follow camera"
+            onClick={() => toggleFollow(id)}
+            style={isFollow ? { background: '#b9722a', color: '#0b0a10' } : undefined}
           >
-            {isFollow ? 'Following · click to release' : 'Follow camera'}
+            F
           </button>
-          <Link
-            href={`/agent/${id}`}
-            className="block w-full border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-center text-xs uppercase text-sky-200 hover:bg-sky-500/15"
-          >
-            Full dossier
-          </Link>
+          <button className="iconbtn" onClick={() => close(null)} title="close">
+            ×
+          </button>
+        </div>
+      </div>
 
-          <section className="grid grid-cols-2 gap-2">
-            <Metric label="cash" value={`$${(detail.agent.balance_cents / 100).toFixed(0)}`} />
-            <Metric label="status" value={detail.agent.status} />
-            <Metric
-              label="employer"
-              value={detail.job?.company ?? detail.employer?.name ?? 'none'}
-            />
-            <Metric label="home" value={detail.home?.name ?? 'homeless'} />
-          </section>
-
-          <section>
-            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Needs</h3>
-            <div className="space-y-1">
-              <Bar label="hunger" value={detail.agent.needs.hunger} flip />
-              <Bar label="energy" value={detail.agent.needs.energy} />
-              <Bar label="social" value={detail.agent.needs.social} />
-              <Bar label="life satisfaction" value={detail.agent.needs.life_satisfaction} />
+      <div className="drawer-scroll">
+        <div className="drawer-section" style={{ display: 'flex', gap: 14 }}>
+          <Portrait seed={portraitSeed} size={84} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div
+              className="pixel"
+              style={{ fontSize: 16, color: '#ffc26b', letterSpacing: '0.08em', lineHeight: 1.1 }}
+            >
+              {name}
             </div>
-          </section>
-
-          <section>
-            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Traits</h3>
-            <div className="grid grid-cols-2 gap-1.5 text-[11px] text-zinc-300 font-mono">
-              {Object.entries(detail.agent.traits)
-                .filter(([k]) =>
-                  ['greed', 'risk', 'empathy', 'ambition', 'sociability', 'paranoia'].includes(k),
-                )
-                .map(([k, v]) => (
-                  <div
-                    key={k}
-                    className="flex justify-between rounded border border-white/5 bg-black/20 px-2 py-1"
-                  >
-                    <span className="text-zinc-500">{k}</span>
-                    <span>{Number(v).toFixed(2)}</span>
-                  </div>
-                ))}
+            <div className="mono" style={{ fontSize: 10, color: '#8a8478', marginTop: 4 }}>
+              ID {id.slice(0, 8)} · {d ? `AGE ${d.agent.age_years}` : '—'}
             </div>
-          </section>
+            <div style={{ fontSize: 12, color: '#ece6d3', marginTop: 6 }}>{occupation}</div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+              <span className={`pill ${PILL_BY_STATUS[status] ?? 'alive'}`}>{status}</span>
+              <span className="pill" style={{ color: '#cdb98a' }}>
+                {state.replace(/_/g, ' ')}
+              </span>
+            </div>
+          </div>
+        </div>
 
-          <section>
-            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Career and inventory</h3>
-            <div className="rounded border border-white/10 bg-black/20 p-2 text-xs text-zinc-300 space-y-1.5">
-              <div className="flex justify-between gap-3">
-                <span className="text-zinc-500">role</span>
-                <span className="text-right">
-                  {detail.job?.role ?? detail.agent.occupation ?? 'unassigned'}
+        <div className="drawer-section">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            <Stat label="Balance" value={fmtMoney(balance)} accent={balance < 0 ? '#e2536e' : '#95b876'} />
+            <Stat label="State" value={state.toUpperCase()} accent="#ffc26b" mono />
+            {d?.home && <Stat label="Home" value={d.home.name} />}
+            {d?.job && <Stat label="Work" value={d.job.building ?? d.job.company} />}
+          </div>
+        </div>
+
+        {d && (
+          <div className="drawer-section">
+            <h4>Needs</h4>
+            {([
+              ['hunger', d.agent.needs.hunger, '#e2536e'],
+              ['energy', d.agent.needs.energy, '#95b876'],
+              ['social', d.agent.needs.social, '#9b7fd1'],
+              ['money_anxiety', d.agent.needs.money_anxiety, '#ffc26b'],
+              ['life_satisfaction', d.agent.needs.life_satisfaction, '#4ec5b8'],
+            ] as Array<[string, number, string]>).map(([k, v, c]) => (
+              <div
+                key={k}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '110px 1fr 28px',
+                  gap: 8,
+                  marginBottom: 5,
+                  alignItems: 'center',
+                }}
+              >
+                <span className="mono" style={{ fontSize: 10, color: '#8a8478' }}>
+                  {k}
+                </span>
+                <div className="bar">
+                  <i style={{ width: `${Math.max(0, Math.min(100, v))}%`, background: c }} />
+                </div>
+                <span
+                  className="mono"
+                  style={{ fontSize: 10, color: '#ece6d3', textAlign: 'right' }}
+                >
+                  {Math.round(v)}
                 </span>
               </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-zinc-500">workplace</span>
-                <span className="text-right">
-                  {detail.job?.building_id ? (
-                    <Link
-                      className="text-sky-300 hover:text-sky-200"
-                      href={`/building/${detail.job.building_id}`}
-                    >
-                      {detail.job.building ?? detail.job.company}
-                    </Link>
-                  ) : (
-                    (detail.employer?.industry ?? 'none')
-                  )}
-                </span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-zinc-500">wage</span>
-                <span className="text-right">
-                  {detail.job ? `$${(Number(detail.job.wage_cents) / 100).toFixed(0)}/day` : 'none'}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1 pt-1">
-                {detail.inventory.map((item) => (
-                  <span
-                    key={item.key}
-                    className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5"
-                  >
-                    {item.key} {item.qty}
+            ))}
+          </div>
+        )}
+
+        {d && (
+          <div className="drawer-section">
+            <h4>Traits</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+              {(
+                ['greed', 'risk', 'empathy', 'ambition', 'sociability', 'paranoia'] as const
+              ).map((k) => (
+                <div
+                  key={k}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '78px 1fr',
+                    gap: 6,
+                    alignItems: 'center',
+                  }}
+                >
+                  <span className="mono" style={{ fontSize: 10, color: '#8a8478' }}>
+                    {k}
                   </span>
-                ))}
-                {detail.inventory.length === 0 && (
-                  <span className="text-zinc-500">no inventory</span>
+                  <div className="bar">
+                    <i
+                      style={{
+                        width: `${(d.agent.traits[k] ?? 0) * 100}%`,
+                        background: '#cdb98a',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {d?.job && (
+          <div className="drawer-section">
+            <h4>Employment</h4>
+            <div style={{ fontSize: 12, color: '#ece6d3' }}>
+              <div>
+                {d.job.role} at <strong style={{ color: '#4ec5b8' }}>{d.job.company}</strong>
+                {d.job.industry && (
+                  <span className="mono" style={{ color: '#8a8478', marginLeft: 6 }}>
+                    · {d.job.industry}
+                  </span>
                 )}
               </div>
-              <div className="border-t border-white/10 pt-1.5">
-                <span className="text-zinc-500">shares</span>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {detail.holdings.slice(0, 4).map((holding) => (
-                    <span
-                      key={holding.company_id}
-                      className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5"
-                    >
-                      {holding.ticker ?? holding.company} {holding.shares}
-                    </span>
-                  ))}
-                  {detail.holdings.length === 0 && <span className="text-zinc-500">none</span>}
-                </div>
+              <div className="mono" style={{ fontSize: 11, color: '#cdb98a', marginTop: 4 }}>
+                wage · ${(Number(d.job.wage_cents) / 100).toFixed(0)} / sim-day
               </div>
             </div>
-          </section>
+          </div>
+        )}
 
-          {detail.votes.length > 0 && (
-            <section>
-              <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Civic record</h3>
-              <div className="space-y-1 text-xs">
-                {detail.votes.slice(0, 3).map((v) => (
-                  <div
-                    key={`${v.election_id}-${v.t}`}
-                    className="rounded border border-white/5 bg-black/20 px-2 py-1 text-zinc-300"
+        {d && d.memories.length > 0 && (
+          <div className="drawer-section">
+            <h4>Recent memories</h4>
+            {d.memories.slice(0, 6).map((m) => (
+              <div
+                key={m.id}
+                style={{
+                  background: '#1c1925',
+                  border: '1px solid #2a2236',
+                  borderLeft: `3px solid ${kindColor(m.kind)}`,
+                  padding: '8px 10px',
+                  marginBottom: 6,
+                }}
+              >
+                <div
+                  style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}
+                >
+                  <span
+                    className="pixel"
+                    style={{ fontSize: 9, color: '#8a8478', letterSpacing: '0.16em' }}
                   >
-                    voted on {v.reason}
-                  </div>
-                ))}
+                    {m.kind.toUpperCase()}
+                  </span>
+                  <span className="mono" style={{ fontSize: 9, color: '#5e5868' }}>
+                    sal {m.salience.toFixed(2)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, color: '#ece6d3', lineHeight: 1.4 }}>{m.summary}</div>
               </div>
-            </section>
-          )}
+            ))}
+          </div>
+        )}
 
-          <section>
-            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Recent events</h3>
-            <div className="space-y-1 text-xs">
-              {detail.recentEvents.length === 0 && <p className="text-zinc-500">No events yet.</p>}
-              {detail.recentEvents.slice(0, 8).map((e) => (
-                <div key={e.id} className="flex gap-2">
-                  <span className="text-zinc-500 font-mono text-[10px] w-16 shrink-0">
+        {d && d.relationships.length > 0 && (
+          <div className="drawer-section">
+            <h4>Top relationships</h4>
+            {d.relationships.slice(0, 6).map((r) => (
+              <RelationRow key={r.obj_id} r={r} />
+            ))}
+          </div>
+        )}
+
+        {d && d.recentEvents.length > 0 && (
+          <div className="drawer-section">
+            <h4>Recent events</h4>
+            <div style={{ display: 'grid', gap: 3 }}>
+              {d.recentEvents.slice(0, 10).map((e) => (
+                <div
+                  key={e.id}
+                  className="mono"
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '52px 1fr',
+                    gap: 8,
+                    fontSize: 11,
+                    color: '#cdb98a',
+                    padding: '2px 0',
+                    borderBottom: '1px dashed #2a2236',
+                  }}
+                >
+                  <span style={{ color: '#5e5868' }}>
                     {new Date(e.t).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
-                  <span className="text-zinc-300">{labelEvent(e.kind, e.payload)}</span>
+                  <span>{e.kind.replace(/_/g, ' ')}</span>
                 </div>
               ))}
             </div>
-          </section>
+          </div>
+        )}
 
-          <section>
-            <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Memory</h3>
-            <div className="space-y-1.5 text-xs">
-              {detail.memories.length === 0 && <p className="text-zinc-500">No memories yet.</p>}
-              {detail.memories.slice(0, 5).map((m) => (
-                <p key={m.id} className="text-zinc-300 leading-snug">
-                  <span className="text-zinc-500 italic">{m.summary}</span>
-                </p>
+        {d && d.holdings.length > 0 && (
+          <div className="drawer-section">
+            <h4>Holdings</h4>
+            <div className="mono" style={{ fontSize: 11, color: '#cdb98a' }}>
+              {d.holdings.slice(0, 6).map((h, i) => (
+                <div
+                  key={i}
+                  style={{ display: 'flex', justifyContent: 'space-between', padding: '3px 0' }}
+                >
+                  <span>
+                    {h.company} · {h.shares} sh
+                  </span>
+                  <span style={{ color: '#ece6d3' }}>{fmtMoney(Number(h.market_value_cents ?? 0))}</span>
+                </div>
               ))}
             </div>
-          </section>
-        </div>
-      )}
-      {loading && !detail && <div className="p-4 text-sm text-zinc-500">Loading…</div>}
-    </div>
-  );
-}
+          </div>
+        )}
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 border border-[var(--line-soft)] bg-[var(--ink-2)] px-2 py-1.5">
-      <div className="text-[10px] uppercase text-zinc-500">{label}</div>
-      <div className="truncate text-xs text-zinc-100">{value}</div>
-    </div>
-  );
-}
+        {d && d.inventory.length > 0 && (
+          <div className="drawer-section">
+            <h4>Inventory</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+              {d.inventory.map((it) => (
+                <div
+                  key={it.key}
+                  style={{ border: '1px solid #2a2236', padding: '6px 8px', background: '#1c1925' }}
+                >
+                  <div
+                    className="pixel"
+                    style={{ fontSize: 9, color: '#8a8478', letterSpacing: '0.18em' }}
+                  >
+                    {it.key.toUpperCase()}
+                  </div>
+                  <div className="mono" style={{ fontSize: 13, color: '#ece6d3' }}>
+                    {it.qty}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
-function Bar({ label, value, flip }: { label: string; value: number; flip?: boolean }) {
-  const pct = Math.max(0, Math.min(100, value));
-  const good = flip ? 100 - pct : pct;
-  const color = good > 60 ? '#7ee787' : good > 30 ? '#f0c84a' : '#f85149';
-  return (
-    <div>
-      <div className="flex justify-between text-[10px] text-zinc-400 mb-0.5">
-        <span>{label}</span>
-        <span className="font-mono">{pct.toFixed(0)}</span>
+        {loading && !d && (
+          <div className="drawer-section" style={{ fontSize: 12, color: '#5e5868' }}>
+            loading dossier…
+          </div>
+        )}
       </div>
-      <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-        <div className="h-full transition-all" style={{ width: `${pct}%`, background: color }} />
+    </div>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  accent,
+  mono,
+}: {
+  label: string;
+  value: string;
+  accent?: string;
+  mono?: boolean;
+}) {
+  return (
+    <div style={{ border: '1px solid #2a2236', padding: '6px 8px', background: '#1c1925' }}>
+      <div className="pixel" style={{ fontSize: 9, color: '#8a8478', letterSpacing: '0.18em' }}>
+        {label.toUpperCase()}
+      </div>
+      <div
+        className={mono ? 'mono' : undefined}
+        style={{ fontSize: 13, color: accent ?? '#ece6d3', marginTop: 2 }}
+      >
+        {value}
       </div>
     </div>
   );
 }
 
-function labelEvent(kind: string, payload: Record<string, unknown>): string {
-  switch (kind) {
-    case 'agent_spoke':
-      return `spoke: "${String(payload.body ?? '').slice(0, 60)}"`;
-    case 'agent_moved':
-      return `moved to ${String(payload.to ?? '…')}`;
-    case 'agent_ate':
-      return `ate ${String(payload.qty ?? 1)} food`;
-    case 'agent_slept':
-      return `slept`;
-    case 'agent_commuted':
-      return `headed to ${String(payload.building ?? payload.company ?? 'work')}`;
-    case 'agent_worked':
-      return `worked as ${String(payload.role ?? 'worker')} at ${String(payload.company ?? 'company')}`;
-    case 'agent_paid_wage':
-      return `received wage $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
-    case 'agent_paid_rent':
-      return `paid rent $${(Number(payload.rent ?? 0) / 100).toFixed(0)}`;
-    case 'city_tax_collected':
-      return `paid city taxes`;
-    case 'city_aid_paid':
-      return `received public aid $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
-    case 'mayor_elected':
-      return `elected mayor`;
-    case 'vote_cast':
-      return `voted for ${String(payload.candidate ?? 'candidate')}`;
-    case 'agent_evicted':
-      return `evicted`;
-    case 'agent_homed':
-      return `moved in to ${String(payload.building ?? '…')}`;
-    case 'agent_hired':
-      return `hired at ${String(payload.company ?? '…')} as ${String(payload.role ?? 'worker')}`;
-    case 'agent_fired':
-      return `fired from ${String(payload.company ?? '…')}`;
-    case 'incident_theft':
-      return `theft reported: $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
-    case 'incident_assault':
-      return `assault reported`;
-    case 'incident_fraud':
-      return `fraud reported: $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
-    case 'incident_breach':
-      return `contract breach reported`;
-    case 'incident_witnessed':
-      return `witnessed ${String(payload.charge ?? 'a case')}`;
-    case 'agent_accused':
-      return `accused in ${String(payload.charge ?? 'a case')}`;
-    case 'court_verdict':
-      return `${payload.guilty ? 'guilty' : 'not guilty'} verdict`;
-    case 'bounty_paid':
-      return `collected bounty $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
-    case 'agent_jailed':
-      return `jailed until ${payload.jail_until ? new Date(String(payload.jail_until)).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'release'}`;
-    case 'agent_released':
-      return `released on parole`;
-    case 'group_founded':
-      return `founded ${String(payload.name ?? 'a group')}`;
-    case 'group_joined':
-      return `joined ${String(payload.name ?? 'a group')}`;
-    case 'group_left':
-      return `left ${String(payload.name ?? 'a group')}`;
-    case 'birth':
-      return `entered civic life`;
-    case 'agent_bankrupt':
-      return `declared bankrupt`;
-    case 'agent_died':
-      return `died (${String(payload.cause ?? '…')})`;
-    default:
-      return kind;
-  }
+function RelationRow({
+  r,
+}: {
+  r: { obj_id: string; affinity: number; trust: number; tags: string[] | null };
+}) {
+  const select = useWorld((s) => s.selectAgent);
+  const otherName = useWorld((s) => s.agents.get(r.obj_id))?.name ?? r.obj_id.slice(0, 6);
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr auto auto',
+        gap: 8,
+        alignItems: 'center',
+        padding: '6px 0',
+        borderBottom: '1px dashed #2a2236',
+        cursor: 'pointer',
+      }}
+      onClick={() => select(r.obj_id)}
+    >
+      <div>
+        <div style={{ fontSize: 12, color: '#ece6d3' }}>{otherName}</div>
+        {(r.tags ?? []).length > 0 && (
+          <div className="mono" style={{ fontSize: 9, color: '#8a8478' }}>
+            {(r.tags ?? []).join(' · ')}
+          </div>
+        )}
+      </div>
+      <AffinityChip label="aff" v={r.affinity} />
+      <AffinityChip label="trust" v={r.trust} />
+    </div>
+  );
+}
+
+function AffinityChip({ label, v }: { label: string; v: number }) {
+  const color = v >= 30 ? '#95b876' : v <= -30 ? '#e2536e' : '#cdb98a';
+  return (
+    <div style={{ minWidth: 48, textAlign: 'right' }}>
+      <div className="pixel" style={{ fontSize: 8, color: '#5e5868', letterSpacing: '0.18em' }}>
+        {label.toUpperCase()}
+      </div>
+      <div className="mono" style={{ fontSize: 11, color }}>
+        {v > 0 ? '+' : ''}
+        {Math.round(v)}
+      </div>
+    </div>
+  );
+}
+
+function kindColor(k: string): string {
+  if (k === 'reflection') return '#9b7fd1';
+  if (k === 'belief') return '#cdb98a';
+  if (k === 'rumor') return '#f0a347';
+  return '#4ec5b8';
 }

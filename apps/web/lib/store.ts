@@ -42,6 +42,10 @@ export interface WorldState {
   selectedAgentId: string | null;
   selectedBuildingId: string | null;
   followAgentId: string | null;
+  heatMode: 'none' | 'crime' | 'wealth' | 'mood';
+  paused: boolean;
+  tourMode: boolean;
+  speed: number;
   setConnected: (b: boolean) => void;
   loadSnapshot: (s: WorldSnapshot) => void;
   loadEvents: (events: LiveEvent[]) => void;
@@ -50,6 +54,10 @@ export interface WorldState {
   selectAgent: (id: string | null) => void;
   selectBuilding: (id: string | null) => void;
   toggleFollow: (id: string) => void;
+  setHeatMode: (m: 'none' | 'crime' | 'wealth' | 'mood') => void;
+  setPaused: (p: boolean) => void;
+  setTourMode: (t: boolean) => void;
+  setSpeed: (s: number) => void;
 }
 
 export const useWorld = create<WorldState>((set, get) => ({
@@ -74,7 +82,15 @@ export const useWorld = create<WorldState>((set, get) => ({
   selectedAgentId: null,
   selectedBuildingId: null,
   followAgentId: null,
+  heatMode: 'none',
+  paused: false,
+  tourMode: false,
+  speed: 1,
   setConnected: (b) => set({ connected: b }),
+  setHeatMode: (m) => set({ heatMode: m }),
+  setPaused: (p) => set({ paused: p }),
+  setTourMode: (t) => set({ tourMode: t }),
+  setSpeed: (s) => set({ speed: s }),
   loadSnapshot: (s) => {
     const m = new Map<string, AgentLive>();
     for (const a of s.agents) m.set(a.id, { ...a });

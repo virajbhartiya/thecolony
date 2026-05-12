@@ -14,48 +14,69 @@ interface EventRow {
   payload: Record<string, unknown>;
 }
 
+const FILTERS = ['', 'agent_', 'incident_', 'company_', 'group_', 'order_', 'trade_', 'news_'];
+
 export default function FeedPage() {
   const [events, setEvents] = useState<EventRow[]>([]);
   const [filter, setFilter] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchEvents()
-      .then((r) => setEvents(r.events ?? []))
-      .catch((e) => setError((e as Error).message));
+    const tick = () =>
+      fetchEvents()
+        .then((r) => setEvents(r.events ?? []))
+        .catch((e) => setError((e as Error).message));
+    tick();
+    const id = setInterval(tick, 4000);
+    return () => clearInterval(id);
   }, []);
 
   const visible = filter ? events.filter((e) => e.kind.includes(filter)) : events;
 
   return (
     <PageChrome title="World Feed" eyebrow="persistent event firehose">
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {['', 'agent_', 'city_', 'company_', 'incident_'].map((value) => (
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+        {FILTERS.map((value) => (
           <button
             key={value || 'all'}
             onClick={() => setFilter(value)}
-            className={`rounded border px-3 py-1 text-xs ${filter === value ? 'border-sky-400/60 bg-sky-500/15 text-sky-200' : 'border-white/10 bg-white/[0.035] text-zinc-300'}`}
+            className={`chip ${filter === value ? 'active' : ''}`}
+            style={{ border: 0 }}
           >
             {value || 'all'}
           </button>
         ))}
       </div>
       {error && <EmptyState>{error}</EmptyState>}
-      {!error && visible.length === 0 && <EmptyState>No events yet.</EmptyState>}
-      <div className="space-y-2">
-        {visible.map((e) => (
-          <Panel key={e.id} className="p-3">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-xs uppercase text-zinc-500">{e.kind}</div>
-                <div className="mt-1 text-sm text-zinc-100">{eventText(e.kind, e.payload)}</div>
+      {!error && visible.length === 0 && <EmptyState>No events yet. The city is waking up.</EmptyState>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {visible.slice(0, 100).map((e) => (
+          <Panel key={e.id} style={{ padding: '12px 14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start' }}>
+              <div style={{ minWidth: 0 }}>
+                <div className="pixel" style={{ fontSize: 10, color: '#8a8478', letterSpacing: '0.16em' }}>
+                  {e.kind.toUpperCase()}
+                </div>
+                <div style={{ fontSize: 13, color: '#ece6d3', marginTop: 4, lineHeight: 1.4 }}>
+                  {eventText(e.kind, e.payload)}
+                </div>
                 {e.actor_ids[0] && (
-                  <Link href={`/agent/${e.actor_ids[0]}`} className="mt-1 inline-block text-xs text-sky-300 hover:text-sky-200">
-                    open primary actor
+                  <Link
+                    href={`/agent/${e.actor_ids[0]}`}
+                    className="mono"
+                    style={{
+                      marginTop: 6,
+                      display: 'inline-block',
+                      fontSize: 11,
+                      color: '#ffc26b',
+                      textDecoration: 'underline dotted',
+                    }}
+                  >
+                    open primary actor →
                   </Link>
                 )}
               </div>
-              <div className="shrink-0 text-right text-xs text-zinc-500">
+              <div className="mono" style={{ fontSize: 10, color: '#5e5868', textAlign: 'right', flexShrink: 0 }}>
                 <div>{timeLabel(e.t)}</div>
                 <div>importance {e.importance}</div>
               </div>

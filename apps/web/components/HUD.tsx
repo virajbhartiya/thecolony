@@ -1,143 +1,220 @@
 'use client';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useWorld } from '../lib/store';
 
-export default function HUD() {
-  const population = useWorld((s) => s.population);
-  const gdp = useWorld((s) => s.gdp_cents);
-  const government = useWorld((s) => s.government);
-  const connected = useWorld((s) => s.connected);
-  const events = useWorld((s) => s.events);
-  const agents = useWorld((s) => s.agents);
-  const recentCrime = events.filter((e) => e.kind.startsWith('incident_')).length;
-  const recentDeaths = events.filter((e) => e.kind === 'agent_died').length;
-  const professionMix = topProfessions(Array.from(agents.values()));
-
-  return (
-    <div className="pointer-events-none absolute inset-0 z-10">
-      <div className="pointer-events-auto absolute left-3 right-3 top-3 lg:left-4 lg:right-[23rem] lg:max-w-[980px]">
-        <div className="panel min-w-0 overflow-hidden">
-          <div className="grid min-h-14 grid-cols-1 border-b border-[var(--line-soft)] lg:grid-cols-[auto_1fr]">
-            <div className="flex min-w-0 items-center gap-3 border-b border-[var(--line-soft)] px-4 py-3 lg:border-b-0 lg:border-r">
-              <div className="grid h-8 w-8 place-items-center border border-[var(--amber)] bg-[var(--ink-0)] text-[var(--amber-2)]">
-                <span className="text-sm font-bold">TC</span>
-              </div>
-              <div className="min-w-0">
-                <h1 className="panel-title truncate">TheColony</h1>
-                <div className="mt-0.5 flex items-center gap-2">
-                <span className="live-dot" />
-                  <span className="panel-tag">
-                  {connected ? 'live shared city' : 'reconnecting'}
-                </span>
-                </div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4">
-              <Stat label="population" value={population.toLocaleString()} />
-              <Stat label="GDP" value={`$${(gdp / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`} />
-              <Stat label="crime" value={recentCrime.toString()} tone={recentCrime > 0 ? 'warn' : 'neutral'} />
-              <Stat label="deaths" value={recentDeaths.toString()} tone={recentDeaths > 0 ? 'danger' : 'neutral'} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-px bg-[var(--line-soft)] md:grid-cols-[1.15fr_1fr_1.1fr]">
-            <InfoBlock
-              label="mayor"
-              primary={government.mayor_name ?? 'unseated'}
-              secondary={`tax ${(government.tax_rate_bps / 100).toFixed(1)}% · treasury $${(government.treasury_cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
-            />
-            <InfoBlock
-              label="next election"
-              primary={government.next_election_at ? timeDistance(government.next_election_at) : 'pending'}
-              secondary={government.turnout ? `${government.turnout} voters last term` : 'founding term'}
-            />
-            <div className="bg-[var(--ink-1)] px-3 py-2">
-              <div className="metric-label">workforce</div>
-              <div className="mt-1 flex flex-wrap gap-1.5">
-                {professionMix.map((p) => (
-                  <span key={p.name} className="hud-chip border border-[var(--line)] bg-[var(--ink-2)] px-1.5 py-0.5 text-[10px] text-[var(--cream-dim)] sm:px-2 sm:text-[11px]">
-                    {p.name} <span className="text-[var(--mute)]">{p.count}</span>
-                  </span>
-                ))}
-                {professionMix.length === 0 && <span className="text-xs text-zinc-500">waiting for snapshot</span>}
-              </div>
-            </div>
-          </div>
-          <div className="hud-nav flex flex-wrap gap-px border-t border-[var(--line-soft)] bg-[var(--ink-0)]">
-            {HUD_LINKS.map(([href, label], index) => (
-              <Link
-                key={href}
-                href={href}
-                className={`${index > 5 ? 'hidden sm:inline-block' : ''} px-2 py-2 text-[10px] uppercase tracking-wide text-[var(--cream-dim)] hover:bg-[var(--ink-3)] hover:text-[var(--amber-2)] sm:px-3 sm:text-[11px]`}
-              >
-                {label}
-              </Link>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InfoBlock({ label, primary, secondary }: { label: string; primary: string; secondary: string }) {
-  return (
-    <div className="min-w-0 bg-[var(--ink-1)] px-3 py-2">
-      <div className="metric-label">{label}</div>
-      <div className="mt-0.5 truncate text-sm font-medium text-[var(--cream)]">{primary}</div>
-      <div className="truncate text-[11px] text-[var(--mute)]">{secondary}</div>
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  tone = 'neutral',
-}: {
-  label: string;
-  value: string;
-  tone?: 'neutral' | 'warn' | 'danger';
-}) {
-  const color =
-    tone === 'warn'
-      ? 'text-[var(--amber-2)]'
-      : tone === 'danger'
-        ? 'text-[var(--ruby)]'
-        : 'text-[var(--cream)]';
-  return (
-    <div className="metric-tile min-w-0">
-      <span className="metric-label">{label}</span>
-      <span className={`metric-value block ${color}`}>{value}</span>
-    </div>
-  );
-}
-
-const HUD_LINKS = [
+const NAV: Array<[string, string]> = [
+  ['/', 'Live'],
   ['/feed', 'Feed'],
   ['/news', 'News'],
   ['/leaderboards', 'Leaders'],
   ['/companies', 'Companies'],
   ['/market', 'Market'],
   ['/crime', 'Crime'],
+  ['/groups', 'Groups'],
   ['/history', 'History'],
-] as const;
+  ['/about', 'About'],
+];
 
-function topProfessions(agents: Array<{ occupation: string | null }>): Array<{ name: string; count: number }> {
-  const counts = new Map<string, number>();
-  for (const agent of agents) {
-    const name = agent.occupation ?? 'unassigned';
-    counts.set(name, (counts.get(name) ?? 0) + 1);
-  }
-  return Array.from(counts, ([name, count]) => ({ name, count }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-    .slice(0, 5);
+function fmtMoney(cents: number): string {
+  const sign = cents < 0 ? '-' : '';
+  const v = Math.abs(cents) / 100;
+  if (v >= 1_000_000) return `${sign}$${(v / 1_000_000).toFixed(2)}M`;
+  if (v >= 1000) return `${sign}$${(v / 1000).toFixed(1)}k`;
+  return `${sign}$${v.toFixed(0)}`;
 }
 
-function timeDistance(iso: string): string {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (!Number.isFinite(ms)) return 'pending';
-  if (ms <= 0) return 'now';
-  const minutes = Math.ceil(ms / 60000);
-  return `${minutes} min`;
+function fmtSimClock(t: string): string {
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return '--:--';
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+function fmtSimDate(t: string): string {
+  const d = new Date(t);
+  if (Number.isNaN(d.getTime())) return '—';
+  return `D${Math.floor((d.getTime() - new Date('2125-01-01').getTime()) / 86_400_000)}`;
+}
+
+function moodLabel(v: number): string {
+  if (v <= -20) return 'restless';
+  if (v <= -8) return 'sour';
+  if (v < 8) return 'flat';
+  if (v < 20) return 'warming';
+  return 'lifted';
+}
+
+export default function HUD() {
+  const population = useWorld((s) => s.population);
+  const gdpCents = useWorld((s) => s.gdp_cents);
+  const simTime = useWorld((s) => s.simTime);
+  const connected = useWorld((s) => s.connected);
+  const paused = useWorld((s) => s.paused);
+  const speed = useWorld((s) => s.speed);
+  const events = useWorld((s) => s.events);
+
+  const crime24h = useMemo(
+    () => events.filter((e) => e.kind.startsWith('incident_')).length,
+    [events],
+  );
+  const deaths24h = useMemo(
+    () => events.filter((e) => e.kind === 'agent_died').length,
+    [events],
+  );
+  const warrants = useMemo(
+    () => events.filter((e) => e.kind === 'agent_accused' || e.kind === 'incident_theft' || e.kind === 'incident_assault').length,
+    [events],
+  );
+
+  // mood index — coarse approximation from event mix
+  const mood = useMemo(() => {
+    const happy = events.filter((e) =>
+      ['agent_paid_wage', 'agent_hired', 'agent_ate', 'agent_homed', 'group_joined', 'birth'].includes(e.kind),
+    ).length;
+    const sad = events.filter((e) =>
+      ['agent_died', 'agent_evicted', 'agent_fired', 'incident_theft', 'incident_assault', 'agent_bankrupt'].includes(
+        e.kind,
+      ),
+    ).length;
+    return happy - sad;
+  }, [events]);
+
+  const [wallTime, setWallTime] = useState('');
+  useEffect(() => {
+    const id = setInterval(
+      () => setWallTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+      1000,
+    );
+    setWallTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+    return () => clearInterval(id);
+  }, []);
+
+  const tick = events[0]?.id ?? 0;
+
+  return (
+    <div
+      className="panel"
+      style={{
+        position: 'absolute',
+        top: 16,
+        left: 16,
+        right: 16,
+        height: 60,
+        display: 'grid',
+        gridTemplateColumns: 'auto 1fr auto',
+        alignItems: 'center',
+        zIndex: 20,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          padding: '0 16px',
+          borderRight: '1px solid #2a2236',
+          height: '100%',
+        }}
+      >
+        <svg width={28} height={28} viewBox="0 0 28 28">
+          <rect x={2} y={14} width={24} height={12} fill="#1c1925" stroke="#f0a347" strokeWidth={1.5} />
+          <rect x={6} y={6} width={6} height={20} fill="#f0a347" />
+          <rect x={14} y={2} width={6} height={24} fill="#ffc26b" />
+          <rect x={22} y={10} width={4} height={16} fill="#4ec5b8" />
+          <rect x={0} y={26} width={28} height={2} fill="#0b0a10" />
+        </svg>
+        <div>
+          <div className="pixel" style={{ fontSize: 14, color: '#ffc26b', letterSpacing: '0.16em' }}>
+            THECOLONY
+          </div>
+          <div className="mono" style={{ fontSize: 9, color: '#8a8478', letterSpacing: '0.18em' }}>
+            LIVE · TICK {tick.toLocaleString()}
+          </div>
+        </div>
+        <nav style={{ display: 'flex', gap: 4, marginLeft: 12 }}>
+          {NAV.slice(0, 1).map(([href, label]) => (
+            <Link
+              key={href}
+              href={href}
+              className="chip"
+              style={{ textDecoration: 'none' }}
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'stretch', height: '100%' }}>
+        <Metric label="SIM CLOCK" value={fmtSimClock(simTime)} sub={fmtSimDate(simTime)} accent="#ffc26b" />
+        <Metric label="POPULATION" value={String(population)} sub={`alive · ${connected ? 'streaming' : 'offline'}`} />
+        <Metric
+          label="GDP / SIM-DAY"
+          value={fmtMoney(gdpCents)}
+          sub={<span className={gdpCents >= 0 ? 'delta-up' : 'delta-down'}>{gdpCents >= 0 ? '▲' : '▼'} agent wallets</span>}
+        />
+        <Metric
+          label="CRIME 24H"
+          value={`${crime24h}`}
+          sub={<span className="delta-down">▲ {warrants} warrants</span>}
+        />
+        <Metric
+          label="MOOD INDEX"
+          value={`${mood >= 0 ? '+' : ''}${mood}`}
+          sub={<span style={{ color: mood < 0 ? '#e2536e' : '#95b876' }}>{moodLabel(mood)}</span>}
+          accent={mood < 0 ? '#e2536e' : '#95b876'}
+        />
+        <Metric
+          label="DEATHS 24H"
+          value={`${deaths24h}`}
+          sub={<span style={{ color: deaths24h > 0 ? '#e2536e' : '#8a8478' }}>obituaries</span>}
+        />
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '0 14px' }}>
+        <nav style={{ display: 'flex', gap: 4 }}>
+          {NAV.slice(1, 6).map(([href, label]) => (
+            <Link key={href} href={href} className="chip" style={{ textDecoration: 'none' }}>
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <div className="mono" style={{ fontSize: 10, color: '#8a8478', textAlign: 'right' }}>
+          <div>WALL · {wallTime}</div>
+          <div>SPEED · {paused ? '0×' : `${speed}×`}</div>
+        </div>
+        <span
+          className="pill"
+          style={{ color: paused ? '#f0a347' : connected ? '#95b876' : '#8a8478' }}
+        >
+          <span
+            style={{ width: 6, height: 6, background: 'currentColor', borderRadius: '50%' }}
+          />
+          {paused ? 'PAUSED' : connected ? 'LIVE' : 'CONN…'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  sub,
+  accent,
+}: {
+  label: string;
+  value: string;
+  sub?: React.ReactNode;
+  accent?: string;
+}) {
+  return (
+    <div className="metric">
+      <div className="metric-label">{label}</div>
+      <div className="metric-value" style={{ color: accent ?? '#ece6d3' }}>
+        {value}
+      </div>
+      <div className="metric-delta">{sub}</div>
+    </div>
+  );
 }
