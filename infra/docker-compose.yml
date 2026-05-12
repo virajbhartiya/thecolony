@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: colony-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: colony
+      POSTGRES_PASSWORD: colony
+      POSTGRES_DB: colony
+    ports:
+      - '5440:5432'
+    volumes:
+      - colony-pg-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U colony']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: colony-redis
+    restart: unless-stopped
+    ports:
+      - '6390:6379'
+    volumes:
+      - colony-redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  colony-pg-data:
+  colony-redis-data:

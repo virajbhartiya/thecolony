@@ -1,5 +1,22 @@
-import 'dotenv/config';
+import { config as loadDotenv } from 'dotenv';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
+
+function findEnvUp(start: string = process.cwd()): string | null {
+  let dir = start;
+  while (true) {
+    const p = resolve(dir, '.env');
+    if (existsSync(p)) return p;
+    const parent = dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+const envPath = findEnvUp();
+if (envPath) loadDotenv({ path: envPath });
+else loadDotenv();
 
 const EnvSchema = z.object({
   DATABASE_URL: z.string().url().default('postgres://colony:colony@localhost:5432/colony'),

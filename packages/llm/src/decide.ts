@@ -1,6 +1,6 @@
 import { env, hasLLMKey } from '@thecolony/config';
 import { ActionSchema, type Action, type Agent } from '@thecolony/domain';
-import { heuristicDecide, type HeuristicContext } from './heuristic.js';
+import { heuristicDecide, type HeuristicContext } from './heuristic';
 
 export interface DecisionInput {
   agent: Agent;

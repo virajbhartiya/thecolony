@@ -1,0 +1,156 @@
+'use client';
+import { create } from 'zustand';
+import type { WorldSnapshot } from './api';
+
+export interface AgentLive {
+  id: string;
+  name: string;
+  pos_x: number;
+  pos_y: number;
+  target_x: number;
+  target_y: number;
+  state: string;
+  status: string;
+  portrait_seed: string;
+  lastBubble?: { text: string; expires: number };
+  lastFloater?: { text: string; color: string; expires: number };
+}
+
+export interface LiveEvent {
+  id: number;
+  t: string;
+  kind: string;
+  actor_ids: string[];
+  location_id: string | null;
+  importance: number;
+  payload: Record<string, unknown>;
+}
+
+export interface WorldState {
+  width: number;
+  height: number;
+  buildings: WorldSnapshot['buildings'];
+  agents: Map<string, AgentLive>;
+  events: LiveEvent[];
+  population: number;
+  gdp_cents: number;
+  simTime: string;
+  connected: boolean;
+  selectedAgentId: string | null;
+  selectedBuildingId: string | null;
+  followAgentId: string | null;
+  setConnected: (b: boolean) => void;
+  loadSnapshot: (s: WorldSnapshot) => void;
+  applyEvent: (e: LiveEvent) => void;
+  setAgentTarget: (id: string, tx: number, ty: number) => void;
+  selectAgent: (id: string | null) => void;
+  selectBuilding: (id: string | null) => void;
+  toggleFollow: (id: string) => void;
+}
+
+export const useWorld = create<WorldState>((set, get) => ({
+  width: 96,
+  height: 96,
+  buildings: [],
+  agents: new Map(),
+  events: [],
+  population: 0,
+  gdp_cents: 0,
+  simTime: new Date().toISOString(),
+  connected: false,
+  selectedAgentId: null,
+  selectedBuildingId: null,
+  followAgentId: null,
+  setConnected: (b) => set({ connected: b }),
+  loadSnapshot: (s) => {
+    const m = new Map<string, AgentLive>();
+    for (const a of s.agents) m.set(a.id, { ...a });
+    set({
+      width: s.width,
+      height: s.height,
+      buildings: s.buildings,
+      agents: m,
+      population: s.population,
+      gdp_cents: s.gdp_cents,
+      simTime: s.sim_time,
+    });
+  },
+  applyEvent: (e) => {
+    const agents = new Map(get().agents);
+    const now = Date.now();
+    const bubble = (id: string, text: string) => {
+      const a = agents.get(id);
+      if (!a) return;
+      agents.set(id, { ...a, lastBubble: { text, expires: now + 4500 } });
+    };
+    const floater = (id: string, text: string, color: string) => {
+      const a = agents.get(id);
+      if (!a) return;
+      agents.set(id, { ...a, lastFloater: { text, color, expires: now + 1800 } });
+    };
+    switch (e.kind) {
+      case 'agent_moved': {
+        // target update — actual coords will sync from next snapshot, but we set a hint
+        break;
+      }
+      case 'agent_spoke': {
+        const body = (e.payload?.body as string) ?? '...';
+        bubble(e.actor_ids[0]!, body.slice(0, 60));
+        break;
+      }
+      case 'agent_paid_wage': {
+        const amt = Number(e.payload?.amount_cents ?? 0) / 100;
+        floater(e.actor_ids[0]!, `+$${amt.toFixed(0)}`, '#7ee787');
+        break;
+      }
+      case 'agent_paid_rent': {
+        const amt = Number(e.payload?.rent ?? 0) / 100;
+        floater(e.actor_ids[0]!, `-$${amt.toFixed(0)}`, '#f0883e');
+        break;
+      }
+      case 'agent_evicted':
+        floater(e.actor_ids[0]!, 'evicted', '#f85149');
+        break;
+      case 'agent_died':
+        floater(e.actor_ids[0]!, '✝', '#888');
+        break;
+    }
+    const events = [e, ...get().events].slice(0, 200);
+    set({ agents, events });
+  },
+  setAgentTarget: (id, tx, ty) => {
+    const agents = new Map(get().agents);
+    const a = agents.get(id);
+    if (!a) return;
+    agents.set(id, { ...a, target_x: tx, target_y: ty });
+    set({ agents });
+  },
+  selectAgent: (id) => set({ selectedAgentId: id, selectedBuildingId: null }),
+  selectBuilding: (id) => set({ selectedBuildingId: id, selectedAgentId: null }),
+  toggleFollow: (id) => set({ followAgentId: get().followAgentId === id ? null : id }),
+}));
+
+export function mergeSnapshotAgents(s: WorldSnapshot) {
+  const state = useWorld.getState();
+  const agents = new Map(state.agents);
+  for (const a of s.agents) {
+    const existing = agents.get(a.id);
+    agents.set(a.id, {
+      ...(existing ?? {}),
+      ...a,
+      // smooth: keep current pos if we already have one, but always update target
+      pos_x: existing?.pos_x ?? a.pos_x,
+      pos_y: existing?.pos_y ?? a.pos_y,
+    });
+  }
+  // drop agents that disappeared (e.g., died)
+  for (const id of Array.from(agents.keys())) {
+    if (!s.agents.find((x) => x.id === id)) agents.delete(id);
+  }
+  useWorld.setState({
+    agents,
+    population: s.population,
+    gdp_cents: s.gdp_cents,
+    simTime: s.sim_time,
+  });
+}

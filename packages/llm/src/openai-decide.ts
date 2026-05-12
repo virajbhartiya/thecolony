@@ -3,7 +3,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { env } from '@thecolony/config';
 import { ActionSchema, type Agent } from '@thecolony/domain';
 import { z } from 'zod';
-import type { DecisionInput, DecisionOutput } from './decide.js';
+import type { DecisionInput, DecisionOutput } from './decide';
 
 const openai = createOpenAI({
   apiKey: env().OPENAI_API_KEY || env().AI_GATEWAY_API_KEY,

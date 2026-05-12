@@ -1,6 +1,6 @@
 import { MAP_HEIGHT, MAP_WIDTH, type BuildingKind, type TerrainKind, type ZoneKind } from '@thecolony/domain';
-import { mulberry32 } from './rng.js';
-import { genCompanyName } from './names.js';
+import { mulberry32 } from './rng';
+import { genCompanyName } from './names';
 
 export interface GenBuilding {
   kind: BuildingKind;
