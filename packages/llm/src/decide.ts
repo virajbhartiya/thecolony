@@ -3,6 +3,7 @@ import { ActionSchema, type Action, type Agent } from '@thecolony/domain';
 import { heuristicDecide, type HeuristicContext } from './heuristic';
 import { canCallLLM, recordCall } from './rate-limit';
 import { shouldUseLLMForDecision } from './budget';
+import { providerDecide } from './provider-decide';
 
 export interface DecisionInput {
   agent: Agent;
@@ -30,8 +31,7 @@ export async function decide(input: DecisionInput): Promise<DecisionOutput> {
   }
   recordCall();
   try {
-    const llm = await import('./provider-decide');
-    return await llm.providerDecide(input);
+    return await providerDecide(input);
   } catch (e) {
     const msg = (e as Error).message ?? '';
     if (!msg.includes('Rate limit')) {

@@ -77,20 +77,80 @@ export function seededRng(seed: number): () => number {
   };
 }
 
-const GREETINGS = [
+// Dialogue varied by mood so 60 agents on the heuristic path don't all
+// recite the same 12 lines back to back. Lines picked by `pickLine()` below.
+const LINES_NEUTRAL = [
   'Cold day, isn’t it?',
-  'Did you hear about the new shop on the river?',
-  'I haven’t eaten since yesterday.',
-  'Work is killing me.',
-  'My landlord is a vulture.',
-  'I think the mayor is hiding something.',
-  'Have you tried the new bread? It’s half air.',
-  'Prices are insane. We can’t go on like this.',
-  'Did Mara say something about me?',
-  'I had a strange dream.',
-  'Listen. I have an idea. A small one. For now.',
-  'Three coins. That’s all I have to my name.',
+  'Have you seen the river this morning?',
+  'There’s a smell off the docks again.',
+  'Heard anything from Old Quarter?',
+  'Long line at the market today.',
+  'The sky looked strange last night.',
+  'Funny how nobody talks anymore.',
+  'You ever notice the bell is off by a minute?',
 ];
+const LINES_HUNGRY = [
+  'I haven’t eaten since yesterday.',
+  'Three coins. That’s all I have to my name.',
+  'If I miss another meal I’ll start eating my belt.',
+  'Bread tastes like sawdust this week.',
+  'The shop owner saw me and looked away.',
+];
+const LINES_TIRED = [
+  'Work is killing me.',
+  'I’ll sleep when I’m dead. Or sooner.',
+  'My back hurts in a place backs don’t hurt.',
+  'I dreamed I was free. Then the bell rang.',
+];
+const LINES_ANGRY = [
+  'My landlord is a vulture.',
+  'They fired four of us and called it pruning.',
+  'Someone owes me money. Someone always does.',
+  'Prices are insane. We can’t go on like this.',
+  'If I see Mara again I won’t hold my tongue.',
+];
+const LINES_PARANOID = [
+  'I think the mayor is hiding something.',
+  'Did Mara say something about me?',
+  'They watch the bells. They always watch.',
+  'I’m being followed. Don’t look.',
+  'The court isn’t fair. It never was.',
+];
+const LINES_HOPEFUL = [
+  'Listen. I have an idea. A small one. For now.',
+  'I might open a stall. Just a small one.',
+  'Saving every coin. You should too.',
+  'Tomorrow will be different. I’ve decided.',
+];
+const LINES_GOSSIP = [
+  'Did you hear about the new shop on the river?',
+  'Have you tried the new bread? It’s half air.',
+  'Theo was at the bar again. Until dawn.',
+  'I saw two of them together. You know who.',
+  'Otto recited a poem at the Lantern. Three left mid-line.',
+  'Someone broke into the chapel. Nothing taken, oddly.',
+];
+const LINES_ECONOMIC = [
+  'Cloth prices doubled in a week.',
+  'My wages don’t reach the rent anymore.',
+  'The mill is hiring. So is bankruptcy court.',
+  'A new factory means new mouths. New problems.',
+];
+
+function pickLine(agent: Agent, rng: () => number): string {
+  const n = agent.needs;
+  const t = agent.traits;
+  // Pick a bucket by current state, with some randomness.
+  const r = rng();
+  if (n.hunger > 65) return pick(LINES_HUNGRY, rng);
+  if (n.energy < 25) return pick(LINES_TIRED, rng);
+  if (t.paranoia > 0.6 && r < 0.5) return pick(LINES_PARANOID, rng);
+  if (agent.balance_cents < 1000 && r < 0.5) return pick(LINES_ANGRY, rng);
+  if (t.ambition > 0.6 && r < 0.35) return pick(LINES_HOPEFUL, rng);
+  if (t.sociability > 0.6 && r < 0.45) return pick(LINES_GOSSIP, rng);
+  if (r < 0.3) return pick(LINES_ECONOMIC, rng);
+  return pick(LINES_NEUTRAL, rng);
+}
 
 function pick<T>(arr: T[], rng: () => number): T {
   return arr[Math.floor(rng() * arr.length)]!;
@@ -249,7 +309,10 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   // Propose a new building. Triggered by deep pockets + ambition. Chooses kind
   // based on what's needed (more shops if shops are crowded, etc.). For
   // simplicity weights by the agent's risk appetite.
-  if (bal > 12000 && ambition > 0.55 && risk > 0.4 && rng() < 0.04) {
+  // Construction gate: previously (bal>12000 && ambition>0.55 && risk>0.4)
+  // selected 0/60 agents in the live city. Loosen so anyone with reasonable
+  // cash AND some ambition OR risk appetite occasionally breaks ground.
+  if (bal > 6000 && (ambition > 0.45 || risk > 0.5) && rng() < 0.06) {
     const pool: Array<'shop' | 'bar' | 'cafe' | 'factory' | 'farm' | 'house' | 'apartment'> = [
       'shop', 'shop', 'cafe', 'bar', 'farm', 'house', 'apartment', 'factory',
     ];
@@ -319,7 +382,7 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
 
   // socialize
   if (ctx.nearby_agents.length > 0 && rng() < sociability * 0.7) {
-    return { kind: 'speak', to: 'nearby', body: pick(GREETINGS, rng) };
+    return { kind: 'speak', to: 'nearby', body: pickLine(agent, rng) };
   }
 
   // homeless? try to rent
