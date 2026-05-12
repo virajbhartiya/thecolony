@@ -41,6 +41,8 @@ const EnvSchema = z.object({
 
   API_PORT: z.coerce.number().default(3001),
   API_HOST: z.string().default('0.0.0.0'),
+  API_READ_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(240),
+  API_READ_RATE_LIMIT_BURST: z.coerce.number().int().positive().default(120),
 
   NEXT_PUBLIC_API_BASE: z.string().default('http://localhost:3001'),
   NEXT_PUBLIC_WS_URL: z.string().default('ws://localhost:3001/v1/events/stream'),
@@ -63,5 +65,7 @@ export function env(): Env {
 
 export function hasLLMKey(): boolean {
   const e = env();
-  return Boolean(e.AI_GATEWAY_API_KEY || e.OPENAI_API_KEY || e.GEMINI_API_KEY || e.GOOGLE_GENERATIVE_AI_API_KEY);
+  return Boolean(
+    e.AI_GATEWAY_API_KEY || e.OPENAI_API_KEY || e.GEMINI_API_KEY || e.GOOGLE_GENERATIVE_AI_API_KEY,
+  );
 }

@@ -266,7 +266,7 @@ Goal: shareable. Every screen pulls its weight.
 - [ ] **M10-T01** Cost guard live with paging (Slack/email webhook). Soft 70% / hard 100%.
 - [ ] **M10-T02** Determinism replay: given an `agent_decision_log` row, replay produces the same action under the same seed.
 - [x] **M10-T03** Daily-report job: nightly markdown summary posted to `/news` and a static archive.
-- [ ] **M10-T04** Public read API rate limiting (per-IP token bucket) at the api layer.
+- [x] **M10-T04** Public read API rate limiting (per-IP token bucket) at the api layer.
 - [ ] **M10-T05** Frontend perf pass: tree-shake, dynamic-import Pixi, lazy-load drawers, lighthouse perf ≥ 80 desktop.
 - [ ] **M10-T06** Production runbook: how to pause world, how to bump speed, how to roll a model, how to restore from backup, how to handle PII/abuse reports.
 - [ ] **M10-T07** Postgres backup: pg_dump to S3 every 6 real hours, 14-day retention.

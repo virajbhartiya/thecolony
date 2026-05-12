@@ -7,14 +7,17 @@ import { registerAgentRoutes } from './routes/agent';
 import { registerEventRoutes } from './routes/events';
 import { registerCityRoutes } from './routes/city';
 import { registerWsRoutes } from './routes/ws';
+import { registerReadRateLimit } from './rate-limit';
 
 async function main() {
   const app = Fastify({
     logger: { transport: { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss.l' } } },
+    trustProxy: true,
   });
 
   await app.register(cors, { origin: true });
   await app.register(websocket);
+  registerReadRateLimit(app);
 
   app.get('/v1/health', async () => ({ ok: true, t: new Date().toISOString() }));
 
