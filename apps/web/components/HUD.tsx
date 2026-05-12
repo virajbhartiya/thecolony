@@ -8,36 +8,14 @@ interface Metrics {
   total_events: number;
   crime_24h: number;
   deaths_24h: number;
-  births_24h: number;
   hires_24h: number;
   fires_24h: number;
-  evictions_24h: number;
-  wages_24h_cents: number;
-  rent_24h_cents: number;
-  thefts_24h_amount_cents: number;
-  trades_24h: number;
-  orders_24h: number;
-  group_founded_24h: number;
-  company_founded_24h: number;
-  warrants_outstanding: number;
   jailed_now: number;
   bankrupt_now: number;
   mood_index: number;
   avg_life_satisfaction: number;
+  warrants_outstanding: number;
 }
-
-const NAV: Array<[string, string]> = [
-  ['/', 'Live'],
-  ['/feed', 'Feed'],
-  ['/news', 'News'],
-  ['/leaderboards', 'Leaders'],
-  ['/companies', 'Companies'],
-  ['/market', 'Market'],
-  ['/crime', 'Crime'],
-  ['/groups', 'Groups'],
-  ['/history', 'History'],
-  ['/about', 'About'],
-];
 
 function fmtMoney(cents: number): string {
   const sign = cents < 0 ? '-' : '';
@@ -47,24 +25,11 @@ function fmtMoney(cents: number): string {
   return `${sign}$${v.toFixed(0)}`;
 }
 
-function fmtSimClock(t: string): string {
+function fmtClock(t: string): string {
   const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return '--:--';
-  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-function fmtSimDate(t: string): string {
-  const d = new Date(t);
-  if (Number.isNaN(d.getTime())) return '—';
-  return `D${Math.floor((d.getTime() - new Date('2125-01-01').getTime()) / 86_400_000)}`;
-}
-
-function moodLabel(v: number): string {
-  if (v <= -20) return 'restless';
-  if (v <= -8) return 'sour';
-  if (v < 8) return 'flat';
-  if (v < 20) return 'warming';
-  return 'lifted';
+  return Number.isNaN(d.getTime())
+    ? '--:--'
+    : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 }
 
 export default function HUD() {
@@ -72,8 +37,6 @@ export default function HUD() {
   const gdpCents = useWorld((s) => s.gdp_cents);
   const simTime = useWorld((s) => s.simTime);
   const connected = useWorld((s) => s.connected);
-  const paused = useWorld((s) => s.paused);
-  const speed = useWorld((s) => s.speed);
 
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   useEffect(() => {
@@ -90,146 +53,87 @@ export default function HUD() {
     };
   }, []);
 
-  const crime24h = metrics?.crime_24h ?? 0;
-  const deaths24h = metrics?.deaths_24h ?? 0;
-  const warrants = metrics?.warrants_outstanding ?? 0;
-  const mood = metrics?.mood_index ?? 0;
-  const tick = metrics?.total_events ?? 0;
-
-  const [wallTime, setWallTime] = useState('');
-  useEffect(() => {
-    const id = setInterval(
-      () => setWallTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
-      1000,
-    );
-    setWallTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-    return () => clearInterval(id);
-  }, []);
-
   return (
     <div
       className="panel"
       style={{
         position: 'absolute',
-        top: 16,
-        left: 16,
-        right: 16,
-        height: 60,
-        display: 'grid',
-        gridTemplateColumns: 'auto 1fr auto',
+        top: 22,
+        left: 12,
+        right: 12,
+        height: 40,
+        display: 'flex',
         alignItems: 'center',
-        zIndex: 20,
+        gap: 14,
+        padding: '0 12px',
+        zIndex: 22,
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 14,
-          padding: '0 16px',
-          borderRight: '1px solid #2a2236',
-          height: '100%',
-        }}
-      >
-        <svg width={28} height={28} viewBox="0 0 28 28">
+      <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+        <svg width={20} height={20} viewBox="0 0 28 28">
           <rect x={2} y={14} width={24} height={12} fill="#1c1925" stroke="#f0a347" strokeWidth={1.5} />
           <rect x={6} y={6} width={6} height={20} fill="#f0a347" />
           <rect x={14} y={2} width={6} height={24} fill="#ffc26b" />
           <rect x={22} y={10} width={4} height={16} fill="#4ec5b8" />
-          <rect x={0} y={26} width={28} height={2} fill="#0b0a10" />
         </svg>
-        <div>
-          <div className="pixel" style={{ fontSize: 14, color: '#ffc26b', letterSpacing: '0.16em' }}>
-            THECOLONY
-          </div>
-          <div className="mono" style={{ fontSize: 9, color: '#8a8478', letterSpacing: '0.18em' }}>
-            LIVE · TICK {tick.toLocaleString()}
-          </div>
-        </div>
-        <nav style={{ display: 'flex', gap: 4, marginLeft: 12 }}>
-          {NAV.slice(0, 1).map(([href, label]) => (
-            <Link
-              key={href}
-              href={href}
-              className="chip"
-              style={{ textDecoration: 'none' }}
-            >
-              {label}
-            </Link>
-          ))}
-        </nav>
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'stretch', height: '100%' }}>
-        <Metric label="SIM CLOCK" value={fmtSimClock(simTime)} sub={fmtSimDate(simTime)} accent="#ffc26b" />
-        <Metric label="POPULATION" value={String(population)} sub={`alive · ${connected ? 'streaming' : 'offline'}`} />
-        <Metric
-          label="GDP / SIM-DAY"
-          value={fmtMoney(gdpCents)}
-          sub={<span className={gdpCents >= 0 ? 'delta-up' : 'delta-down'}>{gdpCents >= 0 ? '▲' : '▼'} agent wallets</span>}
-        />
-        <Metric
-          label="CRIME 24H"
-          value={`${crime24h}`}
-          sub={<span className="delta-down">▲ {warrants} warrants</span>}
-        />
-        <Metric
-          label="MOOD INDEX"
-          value={`${mood >= 0 ? '+' : ''}${mood}`}
-          sub={<span style={{ color: mood < 0 ? '#e2536e' : '#95b876' }}>{moodLabel(mood)}</span>}
-          accent={mood < 0 ? '#e2536e' : '#95b876'}
-        />
-        <Metric
-          label="DEATHS 24H"
-          value={`${deaths24h}`}
-          sub={<span style={{ color: deaths24h > 0 ? '#e2536e' : '#8a8478' }}>obituaries</span>}
-        />
-      </div>
-
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '0 14px' }}>
-        <nav style={{ display: 'flex', gap: 4 }}>
-          {NAV.slice(1, 6).map(([href, label]) => (
-            <Link key={href} href={href} className="chip" style={{ textDecoration: 'none' }}>
-              {label}
-            </Link>
-          ))}
-        </nav>
-        <div className="mono" style={{ fontSize: 10, color: '#8a8478', textAlign: 'right' }}>
-          <div>WALL · {wallTime}</div>
-          <div>SPEED · {paused ? '0×' : `${speed}×`}</div>
-        </div>
-        <span
-          className="pill"
-          style={{ color: paused ? '#f0a347' : connected ? '#95b876' : '#8a8478' }}
-        >
-          <span
-            style={{ width: 6, height: 6, background: 'currentColor', borderRadius: '50%' }}
-          />
-          {paused ? 'PAUSED' : connected ? 'LIVE' : 'CONN…'}
+        <span className="pixel" style={{ fontSize: 11, color: '#ffc26b', letterSpacing: '0.16em' }}>
+          THECOLONY
         </span>
-      </div>
+      </Link>
+
+      <Sep />
+      <Inline label="POP" value={String(population)} accent="#ece6d3" />
+      <Inline label="GDP" value={fmtMoney(gdpCents)} accent="#95b876" />
+      <Inline label="CLOCK" value={fmtClock(simTime)} accent="#ffc26b" />
+      <Inline label="MOOD" value={`${(metrics?.mood_index ?? 0) >= 0 ? '+' : ''}${metrics?.mood_index ?? 0}`} accent={(metrics?.mood_index ?? 0) < 0 ? '#e2536e' : '#95b876'} />
+      <Inline label="CRIME 24H" value={String(metrics?.crime_24h ?? 0)} accent={(metrics?.crime_24h ?? 0) > 0 ? '#e2536e' : '#cdb98a'} />
+      <Inline label="DEATHS" value={String(metrics?.deaths_24h ?? 0)} accent={(metrics?.deaths_24h ?? 0) > 0 ? '#e2536e' : '#cdb98a'} />
+      <Inline label="JAILED" value={String(metrics?.jailed_now ?? 0)} accent="#f0a347" />
+
+      <div style={{ flex: 1 }} />
+
+      <nav style={{ display: 'flex', gap: 4 }}>
+        {[
+          ['/feed', 'Feed'],
+          ['/news', 'News'],
+          ['/leaderboards', 'Leaders'],
+          ['/market', 'Market'],
+          ['/companies', 'Cos'],
+          ['/crime', 'Crime'],
+          ['/groups', 'Groups'],
+          ['/history', 'History'],
+        ].map(([href, label]) => (
+          <Link key={href} href={href} className="chip" style={{ textDecoration: 'none', padding: '2px 7px' }}>
+            {label}
+          </Link>
+        ))}
+      </nav>
+
+      <Sep />
+      <span
+        className="pill"
+        style={{ color: connected ? '#95b876' : '#8a8478', padding: '1px 5px' }}
+      >
+        <span style={{ width: 6, height: 6, background: 'currentColor', borderRadius: '50%' }} />
+        {connected ? 'LIVE' : 'CONN…'}
+      </span>
     </div>
   );
 }
 
-function Metric({
-  label,
-  value,
-  sub,
-  accent,
-}: {
-  label: string;
-  value: string;
-  sub?: React.ReactNode;
-  accent?: string;
-}) {
+function Sep() {
+  return <span style={{ width: 1, alignSelf: 'stretch', background: '#2a2236', margin: '4px 0' }} />;
+}
+
+function Inline({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
-    <div className="metric">
-      <div className="metric-label">{label}</div>
-      <div className="metric-value" style={{ color: accent ?? '#ece6d3' }}>
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5 }}>
+      <span className="pixel" style={{ fontSize: 9, color: '#8a8478', letterSpacing: '0.16em' }}>
+        {label}
+      </span>
+      <span className="mono" style={{ fontSize: 13, color: accent }}>
         {value}
-      </div>
-      <div className="metric-delta">{sub}</div>
-    </div>
+      </span>
+    </span>
   );
 }

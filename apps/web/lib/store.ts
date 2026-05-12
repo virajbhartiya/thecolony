@@ -46,6 +46,9 @@ export interface WorldState {
   paused: boolean;
   tourMode: boolean;
   speed: number;
+  showLeftPanel: boolean;
+  showRightPanel: boolean;
+  showWanted: boolean;
   setConnected: (b: boolean) => void;
   loadSnapshot: (s: WorldSnapshot) => void;
   loadEvents: (events: LiveEvent[]) => void;
@@ -58,6 +61,9 @@ export interface WorldState {
   setPaused: (p: boolean) => void;
   setTourMode: (t: boolean) => void;
   setSpeed: (s: number) => void;
+  toggleLeft: () => void;
+  toggleRight: () => void;
+  toggleWanted: () => void;
 }
 
 export const useWorld = create<WorldState>((set, get) => ({
@@ -86,11 +92,17 @@ export const useWorld = create<WorldState>((set, get) => ({
   paused: false,
   tourMode: false,
   speed: 1,
+  showLeftPanel: false,
+  showRightPanel: true,
+  showWanted: false,
   setConnected: (b) => set({ connected: b }),
   setHeatMode: (m) => set({ heatMode: m }),
   setPaused: (p) => set({ paused: p }),
   setTourMode: (t) => set({ tourMode: t }),
   setSpeed: (s) => set({ speed: s }),
+  toggleLeft: () => set((s) => ({ showLeftPanel: !s.showLeftPanel })),
+  toggleRight: () => set((s) => ({ showRightPanel: !s.showRightPanel })),
+  toggleWanted: () => set((s) => ({ showWanted: !s.showWanted })),
   loadSnapshot: (s) => {
     const m = new Map<string, AgentLive>();
     for (const a of s.agents) m.set(a.id, { ...a });

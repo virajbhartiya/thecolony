@@ -35,8 +35,10 @@ function fmtMoney(cents: number | string | null | undefined): string {
 }
 
 export default function LeftSidebar() {
+  const visible = useWorld((s) => s.showLeftPanel);
   const government = useWorld((s) => s.government);
   const selectAgent = useWorld((s) => s.selectAgent);
+  const toggleLeft = useWorld((s) => s.toggleLeft);
   const [m, setM] = useState<Metrics | null>(null);
 
   useEffect(() => {
@@ -54,16 +56,17 @@ export default function LeftSidebar() {
   }, []);
 
   const hasMayor = Boolean(government?.mayor_id);
+  if (!visible) return null;
 
   return (
     <div
       className="panel"
       style={{
         position: 'absolute',
-        top: 88,
-        left: 16,
-        bottom: 88,
-        width: 296,
+        top: 78,
+        left: 60,
+        bottom: 60,
+        width: 280,
         display: 'flex',
         flexDirection: 'column',
         zIndex: 20,
@@ -71,7 +74,7 @@ export default function LeftSidebar() {
     >
       <div className="panel-header">
         <span className="panel-title">▌ CITY GOVERNMENT</span>
-        <span className="panel-tag">snapshot</span>
+        <button className="iconbtn" onClick={toggleLeft} style={{ width: 18, height: 18, fontSize: 9 }}>×</button>
       </div>
       <div style={{ padding: '10px 12px', borderBottom: '1px solid #2a2236' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>

@@ -35,8 +35,36 @@ export default function CityCanvas({ className }: { className?: string }) {
   const followAgentId = useWorld((s) => s.followAgentId);
   const heatMode = useWorld((s) => s.heatMode);
   const paused = useWorld((s) => s.paused);
+  const events = useWorld((s) => s.events);
   const selectAgent = useWorld((s) => s.selectAgent);
   const selectBuilding = useWorld((s) => s.selectBuilding);
+
+  // Crime-scene markers: when an incident_* event arrives, drop a pulsing red X
+  // at the location for a few seconds.
+  const crimeMarkers = useMemo(() => {
+    const now = Date.now();
+    const markers: Array<{ id: number; x: number; y: number; kind: string; born: number }> = [];
+    for (const e of events) {
+      if (!e.kind.startsWith('incident_')) continue;
+      const eventTime = new Date(e.t).getTime();
+      const age = now - eventTime;
+      if (age > 20_000) break;
+      let bx = 0, by = 0;
+      if (e.location_id) {
+        const b = buildings.find((x) => x.id === e.location_id);
+        if (b) {
+          bx = b.tile_x + b.tile_w / 2;
+          by = b.tile_y + b.tile_h / 2;
+        }
+      } else if (e.actor_ids[0]) {
+        const a = agents.get(e.actor_ids[0]);
+        if (a) { bx = a.pos_x; by = a.pos_y; }
+      }
+      if (bx === 0 && by === 0) continue;
+      markers.push({ id: e.id, x: bx, y: by, kind: e.kind, born: eventTime });
+    }
+    return markers;
+  }, [events, buildings, agents]);
 
   const [view, setView] = useState({ scale: 1.5, x: 0, y: 60 });
   const dragging = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
@@ -375,6 +403,23 @@ export default function CityCanvas({ className }: { className?: string }) {
                   />
                 );
               })}
+
+            {/* crime scene markers */}
+            {crimeMarkers.map((m) => {
+              const age = (Date.now() - m.born) / 20_000;
+              const alpha = Math.max(0, 1 - age);
+              const pulse = 1 + Math.sin(performance.now() / 200) * 0.15;
+              const p = tileToWorld(m.x, m.y);
+              return (
+                <g key={`crime-${m.id}`} transform={`translate(${p.x}, ${p.y - 8})`} opacity={alpha}>
+                  <circle r={14 * pulse} fill="none" stroke="#e2536e" strokeWidth={2} opacity={0.6} />
+                  <line x1={-6} y1={-6} x2={6} y2={6} stroke="#e2536e" strokeWidth={3} />
+                  <line x1={-6} y1={6} x2={6} y2={-6} stroke="#e2536e" strokeWidth={3} />
+                  <line x1={-6} y1={-6} x2={6} y2={6} stroke="#ffffff" strokeWidth={1} />
+                  <line x1={-6} y1={6} x2={6} y2={-6} stroke="#ffffff" strokeWidth={1} />
+                </g>
+              );
+            })}
           </g>
         </g>
       </svg>

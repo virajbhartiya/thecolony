@@ -10,6 +10,10 @@ import BottomBar from '../components/BottomBar';
 import AgentDrawer from '../components/AgentDrawer';
 import BuildingDrawer from '../components/BuildingDrawer';
 import LeftSidebar from '../components/LeftSidebar';
+import StockTicker from '../components/StockTicker';
+import HeadlineBanner from '../components/HeadlineBanner';
+import WantedPanel from '../components/WantedPanel';
+import SideRail from '../components/SideRail';
 
 export default function Home() {
   const loadSnapshot = useWorld((s) => s.loadSnapshot);
@@ -77,10 +81,14 @@ export default function Home() {
     <main style={{ position: 'fixed', inset: 0, background: '#0b0a10', overflow: 'hidden' }}>
       <CityCanvas />
       <div className="scanlines" />
+      <StockTicker />
       <HUD />
+      <SideRail />
       <LeftSidebar />
+      <WantedPanel />
       <EventTicker />
       <BottomBar />
+      <HeadlineBanner />
       {selectedAgentId && <AgentDrawer />}
       {selectedBuildingId && <BuildingDrawer />}
 

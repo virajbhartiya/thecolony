@@ -80,8 +80,12 @@ export default function EventTicker() {
   const buildings = useWorld((s) => s.buildings);
   const select = useWorld((s) => s.selectAgent);
   const selectBuilding = useWorld((s) => s.selectBuilding);
+  const panelVisible = useWorld((s) => s.showRightPanel);
+  const toggleRight = useWorld((s) => s.toggleRight);
 
   const visible = useMemo(() => events.filter((e) => e.importance >= 1).slice(0, 18), [events]);
+
+  if (!panelVisible) return null;
 
   const agentName = (id: string) => agents.get(id)?.name ?? id.slice(0, 6);
   const buildingName = (id: string | null) =>
@@ -111,18 +115,18 @@ export default function EventTicker() {
       className="panel"
       style={{
         position: 'absolute',
-        top: 88,
-        right: 16,
-        width: 340,
-        bottom: 88,
+        top: 78,
+        right: 12,
+        width: 320,
+        bottom: 60,
         display: 'flex',
         flexDirection: 'column',
         zIndex: 20,
       }}
     >
       <div className="panel-header">
-        <span className="panel-title">▌ LIVE FIREHOSE</span>
-        <span className="panel-tag">{events.length} EVENTS</span>
+        <span className="panel-title">▌ LIVE FIREHOSE · {events.length}</span>
+        <button className="iconbtn" onClick={toggleRight} style={{ width: 18, height: 18, fontSize: 9 }}>×</button>
       </div>
       <div style={{ overflowY: 'auto', maxHeight: '58%', flex: '0 0 auto' }}>
         {visible.length === 0 && (
