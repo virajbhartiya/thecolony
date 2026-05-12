@@ -215,7 +215,7 @@ Goal: shareable. Every screen pulls its weight.
 - [x] **M6-T03** `hire` / `fire` actions; companies emit job postings; `seek_job` matches against postings.
 - [x] **M6-T04** `issue_shares` action; once issued past threshold, company appears on `/market`.
 - [x] **M6-T05** Market clearer (BullMQ repeatable every 15 sim-min): price-time priority match, write trades to ledger, update share holdings, emit `trade` events.
-- [ ] **M6-T06** `/market` page: list public companies with price sparklines, order book preview, top movers.
+- [x] **M6-T06** `/market` page: list public companies with price sparklines, order book preview, top movers.
 
 **Milestone DoD:**
 - A founded company hires ≥ 1 worker, issues shares, and shows a price chart within 24 sim-hours.

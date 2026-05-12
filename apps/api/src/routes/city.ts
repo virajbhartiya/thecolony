@@ -160,6 +160,7 @@ export async function registerCityRoutes(app: FastifyInstance) {
       shares_outstanding: number;
       last_price_cents: number | null;
       previous_price_cents: number | null;
+      price_points: number[];
       open_orders: number;
     }>(sql`
       WITH worker_stats AS (
@@ -204,6 +205,19 @@ export async function registerCityRoutes(app: FastifyInstance) {
         COALESCE(ss.shares_outstanding, 0)::bigint AS shares_outstanding,
         ps.last_price_cents,
         ps.previous_price_cents,
+        COALESCE(
+          (
+            SELECT json_agg(points.price_cents ORDER BY points.t)
+            FROM (
+              SELECT po.price_cents, po.t
+              FROM ${schema.price_observation} po
+              WHERE po.asset = ('shares:' || c.id::text)
+              ORDER BY po.t DESC
+              LIMIT 12
+            ) points
+          ),
+          '[]'::json
+        ) AS price_points,
         COALESCE(os.open_orders, 0)::int AS open_orders
       FROM ${schema.company} c
       LEFT JOIN worker_stats ws ON ws.company_id = c.id
