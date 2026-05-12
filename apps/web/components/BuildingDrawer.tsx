@@ -1,16 +1,23 @@
 'use client';
+import { useMemo } from 'react';
 import { useWorld } from '../lib/store';
 
 export default function BuildingDrawer() {
   const id = useWorld((s) => s.selectedBuildingId);
-  const building = useWorld((s) =>
-    id ? s.buildings.find((b) => b.id === id) ?? null : null,
-  );
-  const occupants = useWorld((s) =>
-    id ? Array.from(s.agents.values()).filter((a) => isInBuilding(a, building)) : [],
-  );
+  const buildings = useWorld((s) => s.buildings);
+  const agents = useWorld((s) => s.agents);
   const select = useWorld((s) => s.selectBuilding);
   const selectAgent = useWorld((s) => s.selectAgent);
+
+  const building = useMemo(
+    () => (id ? buildings.find((b) => b.id === id) ?? null : null),
+    [id, buildings],
+  );
+
+  const occupants = useMemo(() => {
+    if (!building) return [];
+    return Array.from(agents.values()).filter((a) => isInBuilding(a, building));
+  }, [agents, building]);
 
   if (!id || !building) return null;
 
@@ -52,8 +59,10 @@ export default function BuildingDrawer() {
   );
 }
 
-function isInBuilding(a: { pos_x: number; pos_y: number }, b: any): boolean {
-  if (!b) return false;
+function isInBuilding(
+  a: { pos_x: number; pos_y: number },
+  b: { tile_x: number; tile_y: number; tile_w: number; tile_h: number },
+): boolean {
   return (
     a.pos_x >= b.tile_x &&
     a.pos_x <= b.tile_x + b.tile_w &&
