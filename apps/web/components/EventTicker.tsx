@@ -152,6 +152,7 @@ export default function EventTicker() {
                 {placeName && (
                   <>
                     {' '}
+                    <span style={{ color: '#5e5868' }}>{prepositionFor(e.kind)}</span>{' '}
                     <span
                       style={{ color: '#4ec5b8', cursor: 'pointer', textDecoration: 'underline dotted' }}
                       onClick={() => e.location_id && selectBuilding(e.location_id)}
@@ -278,7 +279,24 @@ function Leaderboard({
   );
 }
 
+function prepositionFor(kind: string): string {
+  switch (kind) {
+    case 'agent_homed':
+    case 'agent_moved':
+      return 'to';
+    case 'agent_died':
+      return 'near';
+    case 'building_proposed':
+    case 'building_opened':
+      return '—';
+    default:
+      return 'at';
+  }
+}
+
 function summarize(kind: string): string {
+  // No trailing 'at' / 'to' — those are appended only when a location_name
+  // is actually present, otherwise the line ends with a dangling preposition.
   const map: Record<string, string> = {
     agent_died: 'died',
     incident_theft: 'stole from',
@@ -286,37 +304,43 @@ function summarize(kind: string): string {
     incident_fraud: 'defrauded',
     incident_breach: 'breached contract with',
     agent_fired: 'was fired',
-    agent_evicted: 'evicted',
+    agent_evicted: 'was evicted',
     agent_bankrupt: 'went bankrupt',
-    agent_jailed: 'jailed',
-    agent_released: 'released',
-    agent_homed: 'moved into',
-    agent_hired: 'hired at',
+    agent_jailed: 'was jailed',
+    agent_released: 'was released',
+    agent_homed: 'moved in',
+    agent_hired: 'was hired',
     agent_spoke: 'said:',
     agent_dm: 'dm’d',
     agent_broadcast: 'broadcast:',
-    agent_paid_wage: 'received wage at',
-    agent_paid_rent: 'paid rent at',
+    agent_paid_wage: 'received wages',
+    agent_paid_rent: 'paid rent',
     agent_ate: 'ate',
-    agent_bought: 'bought at',
-    agent_sold: 'sold at',
-    agent_worked: 'worked at',
-    agent_moved: 'moved to',
+    agent_bought: 'bought food',
+    agent_sold: 'sold goods',
+    agent_worked: 'worked',
+    agent_moved: 'moved',
     agent_slept: 'slept',
     agent_reflected: 'reflected',
     agent_accused: 'accused',
-    trade_executed: 'traded',
-    order_placed: 'placed order',
-    birth: 'born',
+    trade_executed: 'traded shares',
+    order_placed: 'placed a market order',
+    birth: 'was born',
     migrant_arrived: 'arrived',
-    group_founded: 'founded',
-    group_joined: 'joined',
-    group_left: 'left',
-    company_founded: 'founded company',
+    group_founded: 'founded a faction',
+    group_joined: 'joined a faction',
+    group_left: 'left a faction',
+    company_founded: 'founded a company',
+    company_dissolved: 'dissolved a company',
     shares_issued: 'issued shares',
     news_headline: '— news:',
+    building_proposed: 'broke ground on a new building',
+    building_opened: 'opened a new building',
+    bounty_paid: 'received a bounty',
+    court_verdict: 'received verdict',
+    utility_unpaid: "couldn’t pay the utility bill",
   };
-  return map[kind] ?? kind;
+  return map[kind] ?? kind.replace(/_/g, ' ');
 }
 
 function DetailBlurb({
@@ -356,6 +380,79 @@ function DetailBlurb({
   }
   if (e.kind === 'agent_hired') {
     return <span style={{ color: '#95b876' }}> as {String(p.role ?? 'worker')}</span>;
+  }
+  if (e.kind === 'agent_bought') {
+    const amt = Number(p.amount_cents ?? 0) / 100;
+    const qty = Number(p.qty ?? 1);
+    const company = String(p.company ?? '');
+    return (
+      <span style={{ color: '#cdb98a' }}>
+        {' '}
+        · {qty} {String(p.item ?? 'item')} for ${amt.toFixed(0)}
+        {company && <span style={{ color: '#8a8478' }}> from {company}</span>}
+      </span>
+    );
+  }
+  if (e.kind === 'trade_executed') {
+    const amt = Number(p.amount_cents ?? 0) / 100;
+    const qty = Number(p.qty ?? 0);
+    const ticker = String(p.ticker ?? '');
+    const price = Number(p.price_cents ?? 0) / 100;
+    return (
+      <span style={{ color: '#95b876' }}>
+        {' '}
+        · {qty} {ticker || 'shares'} @ ${price.toFixed(2)} (${amt.toFixed(0)})
+      </span>
+    );
+  }
+  if (e.kind === 'order_placed') {
+    const side = String(p.side ?? 'limit');
+    const ticker = String(p.ticker ?? '');
+    const qty = Number(p.qty ?? 0);
+    const price = Number(p.price_cents ?? 0) / 100;
+    return (
+      <span style={{ color: '#f0c84a' }}>
+        {' '}
+        · {side.toUpperCase()} {qty} {ticker || 'shares'} @ ${price.toFixed(2)}
+      </span>
+    );
+  }
+  if (e.kind === 'agent_bankrupt') {
+    return <span style={{ color: '#9b7fd1' }}> · debts called</span>;
+  }
+  if (e.kind === 'company_dissolved') {
+    return (
+      <span style={{ color: '#9b7fd1' }}>
+        {' '}
+        · "{String(p.company_name ?? 'a company')}"
+      </span>
+    );
+  }
+  if (e.kind === 'company_founded') {
+    return <span style={{ color: '#4ec5b8' }}> · "{String(p.name ?? '')}"</span>;
+  }
+  if (e.kind === 'group_founded' || e.kind === 'group_joined' || e.kind === 'group_left') {
+    return <span style={{ color: '#9b7fd1' }}> · "{String(p.name ?? '')}"</span>;
+  }
+  if (e.kind === 'building_proposed' || e.kind === 'building_opened') {
+    return (
+      <span style={{ color: '#f0c84a' }}>
+        {' '}
+        · {String(p.building_kind ?? p.name ?? '')}
+      </span>
+    );
+  }
+  if (e.kind === 'utility_unpaid') {
+    return (
+      <span style={{ color: '#e2536e' }}>
+        {' '}
+        · {String(p.utility ?? '')} cut off
+      </span>
+    );
+  }
+  if (e.kind === 'migrant_arrived' || e.kind === 'birth') {
+    const name = String(p.name ?? '');
+    if (name) return <span style={{ color: '#95b876' }}> · {name}</span>;
   }
   return null;
 }

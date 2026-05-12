@@ -839,8 +839,8 @@ export async function applyAction(
       const price = Math.min(action.max_price_cents, 300);
       if (Number(agent.balance_cents) < price) return;
       // find any local food company with food in stock
-      const shops = await db.execute<{ company_id: string; qty: number }>(sql`
-        SELECT c.id AS company_id, i.qty AS qty
+      const shops = await db.execute<{ company_id: string; company_name: string; building_id: string | null; qty: number }>(sql`
+        SELECT c.id AS company_id, c.name AS company_name, c.building_id, i.qty AS qty
         FROM ${schema.company} c
         JOIN ${schema.inventory} i
           ON i.owner_kind = 'company' AND i.owner_id = c.id AND i.item_id = 1
@@ -880,8 +880,15 @@ export async function applyAction(
       await writeEvent({
         kind: 'agent_bought',
         actor_ids: [agent.id, shop.company_id],
+        location_id: shop.building_id,
         importance: 2,
-        payload: { item: 'food', qty, amount_cents: total },
+        payload: {
+          item: 'food',
+          qty,
+          amount_cents: total,
+          unit_price_cents: price,
+          company: shop.company_name,
+        },
       });
       return;
     }
