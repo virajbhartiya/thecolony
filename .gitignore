@@ -1,0 +1,41 @@
+# deps
+node_modules
+.pnpm-store
+
+# build
+dist
+build
+.next
+.turbo
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# editor
+.vscode
+.idea
+.DS_Store
+
+# data
+data/
+postgres-data/
+redis-data/
+*.sqlite
+*.sqlite-journal
+
+# pixi cache / coverage
+coverage
+.nyc_output
+
+# generated
+apps/web/.next/
+apps/web/out/
