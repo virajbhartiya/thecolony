@@ -23,23 +23,28 @@ export async function registerCityRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>('/v1/building/:id', async (req, reply) => {
     const id = req.params.id;
-    const [building] = await db.select().from(schema.building).where(eq(schema.building.id, id)).limit(1);
+    const [building] = await db
+      .select()
+      .from(schema.building)
+      .where(eq(schema.building.id, id))
+      .limit(1);
     if (!building) return reply.code(404).send({ error: 'not found' });
 
-    const company = (
-      await db
-        .select({
-          id: schema.company.id,
-          name: schema.company.name,
-          industry: schema.company.industry,
-          treasury_cents: schema.company.treasury_cents,
-          founder_id: schema.company.founder_id,
-          charter: schema.company.charter,
-        })
-        .from(schema.company)
-        .where(eq(schema.company.building_id, id))
-        .limit(1)
-    )[0] ?? null;
+    const company =
+      (
+        await db
+          .select({
+            id: schema.company.id,
+            name: schema.company.name,
+            industry: schema.company.industry,
+            treasury_cents: schema.company.treasury_cents,
+            founder_id: schema.company.founder_id,
+            charter: schema.company.charter,
+          })
+          .from(schema.company)
+          .where(eq(schema.company.building_id, id))
+          .limit(1)
+      )[0] ?? null;
 
     const occupants = await db.execute<{
       id: string;
@@ -93,7 +98,11 @@ export async function registerCityRoutes(app: FastifyInstance) {
     const transactions = await db
       .select()
       .from(schema.ledger_entry)
-      .where(company ? sql`${schema.ledger_entry.debit_id} = ${company.id} OR ${schema.ledger_entry.credit_id} = ${company.id} OR ${schema.ledger_entry.credit_id} = ${id}` : eq(schema.ledger_entry.credit_id, id))
+      .where(
+        company
+          ? sql`${schema.ledger_entry.debit_id} = ${company.id} OR ${schema.ledger_entry.credit_id} = ${company.id} OR ${schema.ledger_entry.credit_id} = ${id}`
+          : eq(schema.ledger_entry.credit_id, id),
+      )
       .orderBy(desc(schema.ledger_entry.t))
       .limit(30);
 
@@ -114,7 +123,12 @@ export async function registerCityRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.agent.balance_cents))
       .limit(20);
 
-    const loved = await db.execute<{ id: string; name: string; occupation: string | null; score: number }>(sql`
+    const loved = await db.execute<{
+      id: string;
+      name: string;
+      occupation: string | null;
+      score: number;
+    }>(sql`
       SELECT a.id, a.name, a.occupation, COALESCE(SUM(r.affinity), 0)::int AS score
       FROM ${schema.agent} a
       LEFT JOIN ${schema.agent_relationship} r ON r.obj_id = a.id
@@ -124,7 +138,12 @@ export async function registerCityRoutes(app: FastifyInstance) {
       LIMIT 20
     `);
 
-    const hated = await db.execute<{ id: string; name: string; occupation: string | null; score: number }>(sql`
+    const hated = await db.execute<{
+      id: string;
+      name: string;
+      occupation: string | null;
+      score: number;
+    }>(sql`
       SELECT a.id, a.name, a.occupation, COALESCE(SUM(r.affinity), 0)::int AS score
       FROM ${schema.agent} a
       LEFT JOIN ${schema.agent_relationship} r ON r.obj_id = a.id
@@ -134,7 +153,13 @@ export async function registerCityRoutes(app: FastifyInstance) {
       LIMIT 20
     `);
 
-    const notorious = await db.execute<{ id: string; name: string; occupation: string | null; incidents: number; severity: number }>(sql`
+    const notorious = await db.execute<{
+      id: string;
+      name: string;
+      occupation: string | null;
+      incidents: number;
+      severity: number;
+    }>(sql`
       SELECT a.id, a.name, a.occupation, COUNT(i.id)::int AS incidents, COALESCE(SUM(i.severity), 0)::int AS severity
       FROM ${schema.agent} a
       JOIN ${schema.incident} i ON i.perp_id = a.id
@@ -234,7 +259,11 @@ export async function registerCityRoutes(app: FastifyInstance) {
       .from(schema.ledger_entry)
       .orderBy(desc(schema.ledger_entry.t))
       .limit(60);
-    const orders = await db.select().from(schema.market_order).orderBy(desc(schema.market_order.t)).limit(50);
+    const orders = await db
+      .select()
+      .from(schema.market_order)
+      .orderBy(desc(schema.market_order.t))
+      .limit(50);
     const trades = await db
       .select()
       .from(schema.price_observation)
@@ -249,12 +278,17 @@ export async function registerCityRoutes(app: FastifyInstance) {
       name: string;
       industry: string | null;
       ticker: string | null;
+      charter: Record<string, unknown>;
       treasury_cents: number;
       founder_id: string | null;
       founder_name: string | null;
       building_id: string | null;
       building_name: string | null;
       building_kind: string | null;
+      zone_kind: string | null;
+      tile_x: number | null;
+      tile_y: number | null;
+      capacity: number | null;
       workers: number;
       payroll_cents: number;
       inventory_qty: number;
@@ -285,9 +319,10 @@ export async function registerCityRoutes(app: FastifyInstance) {
         WHERE status IN ('open','partial') AND qty > filled_qty
         GROUP BY ref_id
       )
-      SELECT c.id, c.name, c.industry, c.ticker, c.treasury_cents,
+      SELECT c.id, c.name, c.industry, c.ticker, c.charter, c.treasury_cents,
         c.founder_id, founder.name AS founder_name,
         b.id AS building_id, b.name AS building_name, b.kind AS building_kind,
+        b.zone_kind, b.tile_x, b.tile_y, b.capacity,
         COALESCE(ws.workers, 0)::int AS workers,
         COALESCE(ws.payroll_cents, 0)::bigint AS payroll_cents,
         COALESCE(inv.inventory_qty, 0)::int AS inventory_qty,
@@ -574,6 +609,10 @@ function headlineFor(kind: string, payload: Record<string, unknown>): string {
       return `${String(payload.company ?? 'A company')} is hiring ${String(payload.role ?? 'workers')}`;
     case 'agent_hired':
       return `${String(payload.company ?? 'A company')} hires a ${String(payload.role ?? 'worker')}`;
+    case 'agent_commuted':
+      return `${String(payload.role ?? 'A worker')} heads to ${String(payload.building ?? payload.company ?? 'work')}`;
+    case 'agent_worked':
+      return `${String(payload.role ?? 'A worker')} works at ${String(payload.company ?? 'a company')}`;
     case 'agent_fired':
       return `${String(payload.company ?? 'A company')} fires a ${String(payload.role ?? 'worker')}`;
     case 'group_founded':

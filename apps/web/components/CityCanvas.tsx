@@ -23,7 +23,12 @@ const BUILDING_PALETTE: Record<string, { roof: string; wall: string; height: num
   factory: { roof: '#4a4f5a', wall: '#8d8d97', height: 46 },
   farm: { roof: '#6e4a2a', wall: '#c6a36c', height: 20 },
   bar: { roof: '#5a3c66', wall: '#b88fb1', height: 28 },
+  restaurant: { roof: '#9f3d2f', wall: '#e3c391', height: 32 },
   office: { roof: '#3a3f5a', wall: '#b8c1e0', height: 64 },
+  clinic: { roof: '#2f6f73', wall: '#d6ece8', height: 42 },
+  school: { roof: '#7b5a2f', wall: '#d8bf8a', height: 38 },
+  newsroom: { roof: '#4d4f59', wall: '#c4c7d1', height: 36 },
+  construction_yard: { roof: '#6b542d', wall: '#a99672', height: 24 },
   bank: { roof: '#222a44', wall: '#d4c8a4', height: 52 },
   court: { roof: '#5c5247', wall: '#eae2cf', height: 48 },
   jail: { roof: '#2a2a2a', wall: '#7a7670', height: 34 },
@@ -44,7 +49,11 @@ const AGENT_STATE_COLOR: Record<string, string> = {
   dead: '#555555',
 };
 
-interface Camera { x: number; y: number; scale: number }
+interface Camera {
+  x: number;
+  y: number;
+  scale: number;
+}
 
 export default function CityCanvas({ className }: { className?: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -61,7 +70,10 @@ export default function CityCanvas({ className }: { className?: string }) {
     const canvas = canvasRef.current;
     if (!container || !canvas) return;
     const ctx = canvas.getContext('2d');
-    if (!ctx) { setError('2D context unavailable'); return; }
+    if (!ctx) {
+      setError('2D context unavailable');
+      return;
+    }
 
     let cancelled = false;
     let rafId = 0;
@@ -117,7 +129,9 @@ export default function CityCanvas({ className }: { className?: string }) {
       lastY = ev.clientY;
       useWorld.setState({ followAgentId: null });
     };
-    const onPointerUp = () => { dragging = false; };
+    const onPointerUp = () => {
+      dragging = false;
+    };
     const onWheel = (ev: WheelEvent) => {
       ev.preventDefault();
       const delta = ev.deltaY < 0 ? 1.1 : 0.9;
@@ -256,7 +270,7 @@ export default function CityCanvas({ className }: { className?: string }) {
       // buildings + agents — depth-sort together by their anchor y
       const buildings = useWorld.getState().buildings;
       type DrawItem =
-        | { kind: 'b'; depth: number; data: typeof buildings[number] }
+        | { kind: 'b'; depth: number; data: (typeof buildings)[number] }
         | { kind: 'a'; depth: number; id: string; lp: { x: number; y: number }; agent: any };
       const items: DrawItem[] = [];
       for (const b of buildings) {
@@ -290,7 +304,14 @@ export default function CityCanvas({ className }: { className?: string }) {
         }
         if (a.lastFloater && a.lastFloater.expires > nowMs) {
           const rem = (a.lastFloater.expires - nowMs) / 1800;
-          drawFloater(ctx, p.x, p.y - 22 - (1 - rem) * 18, a.lastFloater.text, a.lastFloater.color, rem);
+          drawFloater(
+            ctx,
+            p.x,
+            p.y - 22 - (1 - rem) * 18,
+            a.lastFloater.text,
+            a.lastFloater.color,
+            rem,
+          );
         }
       }
 
@@ -300,7 +321,12 @@ export default function CityCanvas({ className }: { className?: string }) {
       const selBId = useWorld.getState().selectedBuildingId;
       if (selBId) {
         const b = buildings.find((x) => x.id === selBId);
-        if (b) drawSelectionRing(ctx, cam, tileToWorld(b.tile_x + b.tile_w / 2, b.tile_y + b.tile_h / 2));
+        if (b)
+          drawSelectionRing(
+            ctx,
+            cam,
+            tileToWorld(b.tile_x + b.tile_w / 2, b.tile_y + b.tile_h / 2),
+          );
       }
       const selAId = useWorld.getState().selectedAgentId;
       if (selAId) {
@@ -431,7 +457,7 @@ function drawAgent(
   a: { state: string; status: string },
 ) {
   const p = tileToWorld(lp.x, lp.y);
-  const color = a.status === 'dead' ? '#555555' : AGENT_STATE_COLOR[a.state] ?? '#fff';
+  const color = a.status === 'dead' ? '#555555' : (AGENT_STATE_COLOR[a.state] ?? '#fff');
   // shadow
   ctx.beginPath();
   ctx.ellipse(p.x, p.y + 4, 7, 3, 0, 0, Math.PI * 2);
@@ -503,7 +529,14 @@ function drawSelectionRing(
   ctx.setLineDash([]);
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+function roundRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
   ctx.arcTo(x + w, y, x + w, y + h, r);

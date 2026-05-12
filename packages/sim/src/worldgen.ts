@@ -1,4 +1,10 @@
-import { MAP_HEIGHT, MAP_WIDTH, type BuildingKind, type TerrainKind, type ZoneKind } from '@thecolony/domain';
+import {
+  MAP_HEIGHT,
+  MAP_WIDTH,
+  type BuildingKind,
+  type TerrainKind,
+  type ZoneKind,
+} from '@thecolony/domain';
 import { mulberry32 } from './rng';
 import { genCompanyName } from './names';
 
@@ -30,7 +36,12 @@ const SPRITE_BY_KIND: Record<BuildingKind, string> = {
   factory: 'factory',
   farm: 'farm',
   bar: 'bar',
+  restaurant: 'shop',
   office: 'office',
+  clinic: 'civic',
+  school: 'civic',
+  newsroom: 'office',
+  construction_yard: 'factory',
   bank: 'bank',
   court: 'civic',
   jail: 'civic',
@@ -142,16 +153,22 @@ export function generateWorld(seed = 42): GeneratedWorld {
   place('town_hall', 22, 4, 4, 4, { name: 'Town Hall' });
   place('court', 32, 5, 3, 3, { name: 'Riverside Court' });
   place('bank', 40, 5, 3, 3, { name: 'First Bank' });
-  place('temple', 48, 5, 3, 3, { name: 'Old Temple' });
+  place('temple', 44, 5, 3, 3, { name: 'Old Temple' });
+  place('clinic', 54, 5, 3, 3, { name: 'Riverside Clinic' });
+  place('school', 10, 14, 3, 3, { name: 'Northbank School', capacity: 14 });
 
   // commercial strip
   for (let i = 0; i < 5; i++) {
     place('shop', 31 + i * 5, 22, 2, 2, {
-      name: ['Riverside Market', 'Glass Goods', 'Old Spice', 'New Bread', 'Iron Tools'][i] ?? `Shop ${i}`,
+      name:
+        ['Riverside Market', 'Glass Goods', 'Old Spice', 'New Bread', 'Iron Tools'][i] ??
+        `Shop ${i}`,
     });
   }
+  place('restaurant', 42, 26, 3, 2, { name: 'New Bread Kitchen', capacity: 10 });
   place('bar', 46, 26, 3, 2, { name: 'The Drunk Gull' });
   place('office', 52, 22, 3, 3, { name: 'Vex & Co.' });
+  place('newsroom', 56, 26, 3, 2, { name: 'The Daily Ledger', capacity: 8 });
 
   // residential (NW quadrant)
   for (let i = 0; i < 6; i++) {
@@ -167,6 +184,7 @@ export function generateWorld(seed = 42): GeneratedWorld {
   place('bar', 12, 64, 3, 2, { name: 'The Sinkhole' });
 
   // industrial (SE)
+  place('construction_yard', 32, 58, 4, 3, { name: 'Canal Works Yard', capacity: 8 });
   place('factory', 40, 50, 4, 3, { name: 'Glass Works' });
   place('factory', 50, 50, 4, 3, { name: 'Iron Forge' });
   place('factory', 40, 60, 4, 3, { name: 'Cloth Mill' });
@@ -213,7 +231,17 @@ function capacityFor(kind: BuildingKind): number {
       return 6;
     case 'bar':
       return 12;
+    case 'restaurant':
+      return 10;
     case 'office':
+      return 8;
+    case 'clinic':
+      return 10;
+    case 'school':
+      return 14;
+    case 'newsroom':
+      return 8;
+    case 'construction_yard':
       return 8;
     case 'bank':
       return 6;

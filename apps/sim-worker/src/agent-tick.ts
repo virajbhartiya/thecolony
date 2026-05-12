@@ -27,7 +27,13 @@ export async function tickDueAgents(now: Date, maxAgents = 6): Promise<number> {
   const rows = await db
     .select()
     .from(schema.agent)
-    .where(and(sql`${schema.agent.status} IN ('alive', 'jailed')`, lte(schema.agent.next_decision_at, now), ne(schema.agent.state, 'walking')))
+    .where(
+      and(
+        sql`${schema.agent.status} IN ('alive', 'jailed')`,
+        lte(schema.agent.next_decision_at, now),
+        ne(schema.agent.state, 'walking'),
+      ),
+    )
     .orderBy(schema.agent.next_decision_at)
     .limit(maxAgents);
 
@@ -37,7 +43,11 @@ export async function tickDueAgents(now: Date, maxAgents = 6): Promise<number> {
       if (row.status === 'jailed') {
         await db
           .update(schema.agent)
-          .set({ state: 'jailed', next_decision_at: new Date(Date.now() + TICK_INTERVAL_MS), updated_at: new Date() })
+          .set({
+            state: 'jailed',
+            next_decision_at: new Date(Date.now() + TICK_INTERVAL_MS),
+            updated_at: new Date(),
+          })
           .where(eq(schema.agent.id, row.id));
         await writeEvent({
           kind: 'agent_reflected',
@@ -67,7 +77,10 @@ async function tickOne(agentRow: Agent): Promise<void> {
   const jitter = Math.floor(Math.random() * 20_000) - 10_000;
   await db
     .update(schema.agent)
-    .set({ next_decision_at: new Date(Date.now() + TICK_INTERVAL_MS + jitter), updated_at: new Date() })
+    .set({
+      next_decision_at: new Date(Date.now() + TICK_INTERVAL_MS + jitter),
+      updated_at: new Date(),
+    })
     .where(eq(schema.agent.id, agentRow.id));
 }
 
@@ -85,7 +98,12 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
       tile_y: b.tile_y,
     }));
 
-  const nearbyAgents = await db.execute<{ id: string; name: string; pos_x: number; pos_y: number }>(sql`
+  const nearbyAgents = await db.execute<{
+    id: string;
+    name: string;
+    pos_x: number;
+    pos_y: number;
+  }>(sql`
     SELECT id, name, pos_x, pos_y
     FROM ${schema.agent}
     WHERE status = 'alive' AND id <> ${agent.id}
@@ -93,11 +111,28 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
     LIMIT 5
   `);
 
-  const job = await db
-    .select()
-    .from(schema.job)
-    .where(and(eq(schema.job.agent_id, agent.id), isNull(schema.job.ended_at)))
-    .limit(1);
+  const [job] = await db.execute<{
+    id: string;
+    role: string;
+    wage_cents: number;
+    company_id: string;
+    company_name: string;
+    industry: string | null;
+    building_id: string | null;
+    building_name: string | null;
+    tile_x: number | null;
+    tile_y: number | null;
+    tile_w: number | null;
+    tile_h: number | null;
+  }>(sql`
+    SELECT j.id, j.role, j.wage_cents, c.id AS company_id, c.name AS company_name, c.industry,
+      b.id AS building_id, b.name AS building_name, b.tile_x, b.tile_y, b.tile_w, b.tile_h
+    FROM ${schema.job} j
+    JOIN ${schema.company} c ON c.id = j.company_id
+    LEFT JOIN ${schema.building} b ON b.id = c.building_id
+    WHERE j.agent_id = ${agent.id} AND j.ended_at IS NULL
+    LIMIT 1
+  `);
 
   const ownedCompany = await db
     .select({
@@ -240,14 +275,14 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
   `);
   const wanted = wantedRow[0] ?? null;
 
-  // are we currently inside a shop's footprint?
+  // are we currently inside a food-selling workplace footprint?
   const shopHere = allBuildings.find(
     (b) =>
-      b.kind === 'shop' &&
+      (b.kind === 'shop' || b.kind === 'restaurant' || b.kind === 'farm') &&
       agent.pos_x >= b.tile_x &&
-      agent.pos_x <= b.tile_x + 2 &&
+      agent.pos_x <= b.tile_x + (b.tile_w ?? 2) &&
       agent.pos_y >= b.tile_y &&
-      agent.pos_y <= b.tile_y + 2,
+      agent.pos_y <= b.tile_y + (b.tile_h ?? 2),
   );
 
   return {
@@ -257,7 +292,13 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
       name: a.name,
       distance: Math.hypot(a.pos_x - agent.pos_x, a.pos_y - agent.pos_y),
     })),
-    has_job: job.length > 0,
+    has_job: Boolean(job),
+    job_role: job?.role ?? null,
+    job_company: job?.company_name ?? null,
+    job_industry: job?.industry ?? null,
+    job_building_id: job?.building_id ?? null,
+    job_building: job?.building_name ?? null,
+    job_wage_cents: job ? Number(job.wage_cents) : null,
     has_home: !!agent.home_id,
     food_qty: Number(foodInv[0]?.qty ?? 0),
     rng: mulberry32(hashStringSeed(agent.id + Date.now().toString())),
@@ -280,11 +321,18 @@ async function buildContext(agent: Agent, allBuildings: BuildingRow[]) {
       best_ask_cents: asset.best_ask_cents === null ? null : Number(asset.best_ask_cents),
       best_bid_cents: asset.best_bid_cents === null ? null : Number(asset.best_bid_cents),
     })),
-    share_holdings: shareHoldings.map((holding) => ({ ...holding, shares: Number(holding.shares) })),
+    share_holdings: shareHoldings.map((holding) => ({
+      ...holding,
+      shares: Number(holding.shares),
+    })),
   };
 }
 
-export async function applyAction(agent: Agent, action: Action, allBuildings: BuildingRow[]): Promise<void> {
+export async function applyAction(
+  agent: Agent,
+  action: Action,
+  allBuildings: BuildingRow[],
+): Promise<void> {
   switch (action.kind) {
     case 'idle':
       await db.update(schema.agent).set({ state: 'idle' }).where(eq(schema.agent.id, agent.id));
@@ -310,7 +358,12 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
             state = 'eating'
         WHERE id = ${agent.id}
       `);
-      await writeEvent({ kind: 'agent_ate', actor_ids: [agent.id], importance: 1, payload: { qty } });
+      await writeEvent({
+        kind: 'agent_ate',
+        actor_ids: [agent.id],
+        importance: 1,
+        payload: { qty },
+      });
       return;
     }
     case 'move': {
@@ -340,14 +393,67 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       return;
     }
     case 'work': {
-      const job = await db
-        .select()
-        .from(schema.job)
-        .where(and(eq(schema.job.agent_id, agent.id), isNull(schema.job.ended_at)))
-        .limit(1);
-      if (!job.length) return;
+      const [job] = await db.execute<{
+        company_id: string;
+        company: string;
+        role: string;
+        wage_cents: number;
+        building_id: string | null;
+        building: string | null;
+        tile_x: number | null;
+        tile_y: number | null;
+        tile_w: number | null;
+        tile_h: number | null;
+      }>(sql`
+        SELECT j.company_id, c.name AS company, j.role, j.wage_cents,
+          b.id AS building_id, b.name AS building, b.tile_x, b.tile_y, b.tile_w, b.tile_h
+        FROM ${schema.job} j
+        JOIN ${schema.company} c ON c.id = j.company_id
+        LEFT JOIN ${schema.building} b ON b.id = c.building_id
+        WHERE j.agent_id = ${agent.id} AND j.ended_at IS NULL
+        LIMIT 1
+      `);
+      if (!job) return;
+      const atWorkplace =
+        job.building_id && job.tile_x !== null && job.tile_y !== null
+          ? agent.pos_x >= Number(job.tile_x) &&
+            agent.pos_x <= Number(job.tile_x) + Number(job.tile_w ?? 2) &&
+            agent.pos_y >= Number(job.tile_y) &&
+            agent.pos_y <= Number(job.tile_y) + Number(job.tile_h ?? 2)
+          : false;
+
+      if (job.building_id && job.tile_x !== null && job.tile_y !== null && !atWorkplace) {
+        await db
+          .update(schema.agent)
+          .set({
+            target_x: Number(job.tile_x) + 0.5,
+            target_y: Number(job.tile_y) + 0.5,
+            state: 'walking',
+          })
+          .where(eq(schema.agent.id, agent.id));
+        await writeEvent({
+          kind: 'agent_commuted',
+          actor_ids: [agent.id, job.company_id],
+          location_id: job.building_id,
+          importance: 2,
+          payload: { company: job.company, role: job.role, building: job.building },
+        });
+        return;
+      }
+
       await db.update(schema.agent).set({ state: 'working' }).where(eq(schema.agent.id, agent.id));
-      await writeEvent({ kind: 'agent_worked', actor_ids: [agent.id], importance: 1 });
+      await writeEvent({
+        kind: 'agent_worked',
+        actor_ids: [agent.id, job.company_id],
+        location_id: job.building_id,
+        importance: 2,
+        payload: {
+          company: job.company,
+          role: job.role,
+          wage_cents: Number(job.wage_cents),
+          building: job.building,
+        },
+      });
       return;
     }
     case 'seek_job': {
@@ -391,7 +497,9 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       for (const c of companies) {
         if (Number(c.workers) < 5) {
           const role = agent.occupation?.toLowerCase() ?? roleForIndustry(c.industry);
-          const wage_cents = c.has_posting ? wageForRole(role) : wageForOccupation(agent.occupation);
+          const wage_cents = c.has_posting
+            ? wageForRole(role)
+            : wageForOccupation(agent.occupation);
           await db.insert(schema.job).values({
             agent_id: agent.id,
             company_id: c.id,
@@ -419,9 +527,17 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       return;
     }
     case 'hire': {
-      const [owned] = await db.select().from(schema.company).where(eq(schema.company.founder_id, agent.id)).limit(1);
+      const [owned] = await db
+        .select()
+        .from(schema.company)
+        .where(eq(schema.company.founder_id, agent.id))
+        .limit(1);
       if (!owned) return;
-      const [target] = await db.select().from(schema.agent).where(eq(schema.agent.id, action.agent_id)).limit(1);
+      const [target] = await db
+        .select()
+        .from(schema.agent)
+        .where(eq(schema.agent.id, action.agent_id))
+        .limit(1);
       if (!target || target.status !== 'alive') return;
       const existing = await db
         .select()
@@ -458,12 +574,22 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       return;
     }
     case 'fire': {
-      const [owned] = await db.select().from(schema.company).where(eq(schema.company.founder_id, agent.id)).limit(1);
+      const [owned] = await db
+        .select()
+        .from(schema.company)
+        .where(eq(schema.company.founder_id, agent.id))
+        .limit(1);
       if (!owned) return;
       const [job] = await db
         .select()
         .from(schema.job)
-        .where(and(eq(schema.job.company_id, owned.id), eq(schema.job.agent_id, action.agent_id), isNull(schema.job.ended_at)))
+        .where(
+          and(
+            eq(schema.job.company_id, owned.id),
+            eq(schema.job.agent_id, action.agent_id),
+            isNull(schema.job.ended_at),
+          ),
+        )
         .limit(1);
       if (!job || job.agent_id === agent.id) return;
       await db.update(schema.job).set({ ended_at: new Date() }).where(eq(schema.job.id, job.id));
@@ -526,7 +652,10 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
           SET shares = ${schema.share_holding.shares} + EXCLUDED.shares,
               updated_at = now()
       `);
-      await db.update(schema.agent).set({ employer_id: company.id }).where(eq(schema.agent.id, agent.id));
+      await db
+        .update(schema.agent)
+        .set({ employer_id: company.id })
+        .where(eq(schema.agent.id, agent.id));
       await db.insert(schema.ledger_entry).values({
         debit_kind: 'agent',
         debit_id: agent.id,
@@ -551,11 +680,16 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       return;
     }
     case 'issue_shares': {
-      const [company] = await db.select().from(schema.company).where(eq(schema.company.id, action.company_id)).limit(1);
+      const [company] = await db
+        .select()
+        .from(schema.company)
+        .where(eq(schema.company.id, action.company_id))
+        .limit(1);
       if (!company || company.founder_id !== agent.id || company.dissolved_at) return;
       const shares = Math.max(1, Math.min(2500, action.shares));
       const ticker = company.ticker ?? tickerForCompany(company.name, company.id);
-      if (!company.ticker) await db.update(schema.company).set({ ticker }).where(eq(schema.company.id, company.id));
+      if (!company.ticker)
+        await db.update(schema.company).set({ ticker }).where(eq(schema.company.id, company.id));
       await db.execute(sql`
         INSERT INTO ${schema.share_holding} (agent_id, company_id, shares)
         VALUES (${agent.id}, ${company.id}, ${shares})
@@ -588,7 +722,11 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
     case 'place_order': {
       const companyId = companyIdFromShareAsset(action.asset);
       if (!companyId) return;
-      const [company] = await db.select().from(schema.company).where(eq(schema.company.id, companyId)).limit(1);
+      const [company] = await db
+        .select()
+        .from(schema.company)
+        .where(eq(schema.company.id, companyId))
+        .limit(1);
       if (!company || company.dissolved_at) return;
       const qty = Math.max(1, Math.min(100, action.qty));
       const price = Math.max(1, Math.min(100_000, action.price_cents));
@@ -656,13 +794,13 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       if (action.item !== 'food') return;
       const price = Math.min(action.max_price_cents, 300);
       if (Number(agent.balance_cents) < price) return;
-      // find any shop company with food in stock
+      // find any local food company with food in stock
       const shops = await db.execute<{ company_id: string; qty: number }>(sql`
         SELECT c.id AS company_id, i.qty AS qty
         FROM ${schema.company} c
         JOIN ${schema.inventory} i
           ON i.owner_kind = 'company' AND i.owner_id = c.id AND i.item_id = 1
-        WHERE c.industry IN ('shop','farm') AND i.qty > 0
+        WHERE c.industry IN ('shop','farm','restaurant') AND i.qty > 0
         ORDER BY i.qty DESC
         LIMIT 1
       `);
@@ -705,7 +843,11 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
     }
     case 'steal': {
       const targetId = action.target_agent_id;
-      const [target] = await db.select().from(schema.agent).where(eq(schema.agent.id, targetId)).limit(1);
+      const [target] = await db
+        .select()
+        .from(schema.agent)
+        .where(eq(schema.agent.id, targetId))
+        .limit(1);
       if (!target || target.status !== 'alive') return;
       const loot = Math.min(Number(target.balance_cents), 500 + Math.floor(Math.random() * 1500));
       if (loot <= 0) return;
@@ -745,9 +887,16 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       return;
     }
     case 'assault': {
-      const [target] = await db.select().from(schema.agent).where(eq(schema.agent.id, action.target_agent_id)).limit(1);
+      const [target] = await db
+        .select()
+        .from(schema.agent)
+        .where(eq(schema.agent.id, action.target_agent_id))
+        .limit(1);
       if (!target || target.status !== 'alive' || target.id === agent.id) return;
-      const severity = Math.max(2, Math.min(5, Math.round(2 + agent.traits.risk * 3 - agent.traits.empathy)));
+      const severity = Math.max(
+        2,
+        Math.min(5, Math.round(2 + agent.traits.risk * 3 - agent.traits.empathy)),
+      );
       await createIncident({
         kind: 'assault',
         perp_id: agent.id,
@@ -763,16 +912,29 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
               trust    = LEAST(100, GREATEST(-100, ${schema.agent_relationship.trust} - 60)),
               tags     = ARRAY['assaulted_by']
       `);
-      const lethalChance = severity >= 5 ? Math.max(0.08, agent.traits.risk * 0.18 + agent.traits.greed * 0.08 - agent.traits.empathy * 0.08) : 0;
+      const lethalChance =
+        severity >= 5
+          ? Math.max(
+              0.08,
+              agent.traits.risk * 0.18 + agent.traits.greed * 0.08 - agent.traits.empathy * 0.08,
+            )
+          : 0;
       if (lethalChance > 0 && Math.random() < lethalChance) {
         await markAgentDead(target.id, 'violence');
       }
       return;
     }
     case 'fraud': {
-      const [target] = await db.select().from(schema.agent).where(eq(schema.agent.id, action.target_agent_id)).limit(1);
+      const [target] = await db
+        .select()
+        .from(schema.agent)
+        .where(eq(schema.agent.id, action.target_agent_id))
+        .limit(1);
       if (!target || target.status !== 'alive' || target.id === agent.id) return;
-      const amount = Math.min(Number(target.balance_cents), Math.max(100, Math.min(action.amount_cents, 5000)));
+      const amount = Math.min(
+        Number(target.balance_cents),
+        Math.max(100, Math.min(action.amount_cents, 5000)),
+      );
       if (amount <= 0) return;
       await db
         .update(schema.agent)
@@ -809,7 +971,11 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
       return;
     }
     case 'breach': {
-      const [counterparty] = await db.select().from(schema.agent).where(eq(schema.agent.id, action.counterparty_id)).limit(1);
+      const [counterparty] = await db
+        .select()
+        .from(schema.agent)
+        .where(eq(schema.agent.id, action.counterparty_id))
+        .limit(1);
       if (!counterparty || counterparty.status !== 'alive' || counterparty.id === agent.id) return;
       await createIncident({
         kind: 'breach',
@@ -831,7 +997,12 @@ export async function applyAction(agent: Agent, action: Action, allBuildings: Bu
     }
     case 'accuse':
       if (action.target_agent_id !== agent.id) {
-        await accuseAgent(agent.id, action.target_agent_id, action.charge, action.incident_id ?? null);
+        await accuseAgent(
+          agent.id,
+          action.target_agent_id,
+          action.charge,
+          action.incident_id ?? null,
+        );
       }
       return;
     case 'found_group':
@@ -854,7 +1025,11 @@ function companyIdFromShareAsset(asset: string): string | null {
   return asset.startsWith('shares:') ? asset.slice('shares:'.length) : null;
 }
 
-async function findVacantWorkplace(industry: string, agent: Agent, allBuildings: BuildingRow[]): Promise<BuildingRow | null> {
+async function findVacantWorkplace(
+  industry: string,
+  agent: Agent,
+  allBuildings: BuildingRow[],
+): Promise<BuildingRow | null> {
   const occupiedRows = await db.execute<{ building_id: string }>(sql`
     SELECT building_id
     FROM ${schema.company}
@@ -878,8 +1053,18 @@ function workplaceKindsForIndustry(industry: string): string[] {
       return ['shop'];
     case 'bar':
       return ['bar'];
+    case 'restaurant':
+      return ['restaurant', 'shop'];
     case 'bank':
       return ['bank', 'office'];
+    case 'clinic':
+      return ['clinic'];
+    case 'school':
+      return ['school'];
+    case 'newsroom':
+      return ['newsroom', 'office'];
+    case 'construction_yard':
+      return ['construction_yard', 'factory'];
     case 'court':
       return ['court', 'town_hall', 'office'];
     case 'town_hall':
@@ -911,11 +1096,16 @@ function currentBuildingId(agent: Agent, allBuildings: BuildingRow[]): string | 
 function wageForOccupation(occupation: string | null | undefined): number {
   const text = (occupation ?? '').toLowerCase();
   if (text.includes('broker')) return 2800;
+  if (text.includes('doctor')) return 2900;
   if (text.includes('engineer')) return 2400;
+  if (text.includes('mechanic')) return 2200;
   if (text.includes('builder')) return 2200;
   if (text.includes('chef')) return 2000;
   if (text.includes('guard')) return 2000;
   if (text.includes('shopkeeper')) return 2100;
   if (text.includes('civil')) return 2000;
+  if (text.includes('teacher')) return 1900;
+  if (text.includes('reporter')) return 1800;
+  if (text.includes('courier')) return 1600;
   return 1600;
 }

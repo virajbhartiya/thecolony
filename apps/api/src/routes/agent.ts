@@ -36,7 +36,7 @@ export async function registerAgentRoutes(app: FastifyInstance) {
       .limit(20);
 
     const employer = agent.employer_id
-      ? (
+      ? ((
           await db
             .select({
               id: schema.company.id,
@@ -47,11 +47,34 @@ export async function registerAgentRoutes(app: FastifyInstance) {
             .from(schema.company)
             .where(eq(schema.company.id, agent.employer_id))
             .limit(1)
-        )[0] ?? null
+        )[0] ?? null)
       : null;
 
+    const job =
+      (
+        await db.execute<{
+          id: string;
+          role: string;
+          wage_cents: number;
+          company_id: string;
+          company: string;
+          industry: string | null;
+          building_id: string | null;
+          building: string | null;
+          zone_kind: string | null;
+        }>(sql`
+        SELECT j.id, j.role, j.wage_cents, c.id AS company_id, c.name AS company, c.industry,
+          b.id AS building_id, b.name AS building, b.zone_kind
+        FROM ${schema.job} j
+        JOIN ${schema.company} c ON c.id = j.company_id
+        LEFT JOIN ${schema.building} b ON b.id = c.building_id
+        WHERE j.agent_id = ${id} AND j.ended_at IS NULL
+        LIMIT 1
+      `)
+      )[0] ?? null;
+
     const home = agent.home_id
-      ? (
+      ? ((
           await db
             .select({
               id: schema.building.id,
@@ -62,7 +85,7 @@ export async function registerAgentRoutes(app: FastifyInstance) {
             .from(schema.building)
             .where(eq(schema.building.id, agent.home_id))
             .limit(1)
-        )[0] ?? null
+        )[0] ?? null)
       : null;
 
     const inventory = await db.execute<{ key: string; qty: number }>(sql`
@@ -119,7 +142,18 @@ export async function registerAgentRoutes(app: FastifyInstance) {
       .orderBy(desc(schema.city_vote.t))
       .limit(5);
 
-    return { agent, employer, home, inventory, holdings, votes, recentEvents, memories, relationships: rels };
+    return {
+      agent,
+      employer,
+      job,
+      home,
+      inventory,
+      holdings,
+      votes,
+      recentEvents,
+      memories,
+      relationships: rels,
+    };
   });
 
   app.get('/v1/agents', async () => {

@@ -14,20 +14,49 @@ interface AgentDetail {
     status: string;
     state: string;
     occupation: string | null;
-    needs: { hunger: number; energy: number; social: number; money_anxiety: number; life_satisfaction: number };
+    needs: {
+      hunger: number;
+      energy: number;
+      social: number;
+      money_anxiety: number;
+      life_satisfaction: number;
+    };
     traits: Record<string, number>;
     portrait_seed: string;
     pos_x: number;
     pos_y: number;
   };
   employer: { id: string; name: string; industry: string | null; treasury_cents: number } | null;
+  job: {
+    id: string;
+    role: string;
+    wage_cents: number;
+    company_id: string;
+    company: string;
+    industry: string | null;
+    building_id: string | null;
+    building: string | null;
+    zone_kind: string | null;
+  } | null;
   home: { id: string; name: string; kind: string; rent_cents: number } | null;
   inventory: Array<{ key: string; qty: number }>;
-  holdings: Array<{ company_id: string; company: string; ticker: string | null; shares: number; market_value_cents: number | null }>;
+  holdings: Array<{
+    company_id: string;
+    company: string;
+    ticker: string | null;
+    shares: number;
+    market_value_cents: number | null;
+  }>;
   votes: Array<{ election_id: string; candidate_id: string; reason: string; t: string }>;
   recentEvents: Array<{ id: number; t: string; kind: string; payload: Record<string, unknown> }>;
   memories: Array<{ id: number; t: string; kind: string; summary: string; salience: number }>;
-  relationships: Array<{ subj_id: string; obj_id: string; affinity: number; trust: number; tags: string[] | null }>;
+  relationships: Array<{
+    subj_id: string;
+    obj_id: string;
+    affinity: number;
+    trust: number;
+    tags: string[] | null;
+  }>;
 }
 
 export default function AgentDrawer() {
@@ -61,12 +90,16 @@ export default function AgentDrawer() {
         <div className="flex-1 min-w-0">
           <h2 className="text-base font-medium truncate">{detail?.agent.name ?? '…'}</h2>
           <p className="text-xs text-zinc-400">
-            {detail ? `age ${detail.agent.age_years} · ${detail.agent.occupation ?? 'unemployed'}` : 'loading…'}
+            {detail
+              ? `age ${detail.agent.age_years} · ${detail.agent.occupation ?? 'unemployed'}`
+              : 'loading…'}
           </p>
           {detail && (
             <p className="text-xs text-zinc-400 mt-0.5">
-              <span className="text-zinc-300 font-medium">${(detail.agent.balance_cents / 100).toFixed(0)}</span>
-              {' '}· state: {detail.agent.state}
+              <span className="text-zinc-300 font-medium">
+                ${(detail.agent.balance_cents / 100).toFixed(0)}
+              </span>{' '}
+              · state: {detail.agent.state}
             </p>
           )}
         </div>
@@ -100,7 +133,10 @@ export default function AgentDrawer() {
           <section className="grid grid-cols-2 gap-2">
             <Metric label="cash" value={`$${(detail.agent.balance_cents / 100).toFixed(0)}`} />
             <Metric label="status" value={detail.agent.status} />
-            <Metric label="employer" value={detail.employer?.name ?? 'none'} />
+            <Metric
+              label="employer"
+              value={detail.job?.company ?? detail.employer?.name ?? 'none'}
+            />
             <Metric label="home" value={detail.home?.name ?? 'homeless'} />
           </section>
 
@@ -118,9 +154,14 @@ export default function AgentDrawer() {
             <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Traits</h3>
             <div className="grid grid-cols-2 gap-1.5 text-[11px] text-zinc-300 font-mono">
               {Object.entries(detail.agent.traits)
-                .filter(([k]) => ['greed', 'risk', 'empathy', 'ambition', 'sociability', 'paranoia'].includes(k))
+                .filter(([k]) =>
+                  ['greed', 'risk', 'empathy', 'ambition', 'sociability', 'paranoia'].includes(k),
+                )
                 .map(([k, v]) => (
-                  <div key={k} className="flex justify-between rounded border border-white/5 bg-black/20 px-2 py-1">
+                  <div
+                    key={k}
+                    className="flex justify-between rounded border border-white/5 bg-black/20 px-2 py-1"
+                  >
                     <span className="text-zinc-500">{k}</span>
                     <span>{Number(v).toFixed(2)}</span>
                   </div>
@@ -133,25 +174,52 @@ export default function AgentDrawer() {
             <div className="rounded border border-white/10 bg-black/20 p-2 text-xs text-zinc-300 space-y-1.5">
               <div className="flex justify-between gap-3">
                 <span className="text-zinc-500">role</span>
-                <span className="text-right">{detail.agent.occupation ?? 'unassigned'}</span>
+                <span className="text-right">
+                  {detail.job?.role ?? detail.agent.occupation ?? 'unassigned'}
+                </span>
               </div>
               <div className="flex justify-between gap-3">
                 <span className="text-zinc-500">workplace</span>
-                <span className="text-right">{detail.employer?.industry ?? 'none'}</span>
+                <span className="text-right">
+                  {detail.job?.building_id ? (
+                    <Link
+                      className="text-sky-300 hover:text-sky-200"
+                      href={`/building/${detail.job.building_id}`}
+                    >
+                      {detail.job.building ?? detail.job.company}
+                    </Link>
+                  ) : (
+                    (detail.employer?.industry ?? 'none')
+                  )}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-zinc-500">wage</span>
+                <span className="text-right">
+                  {detail.job ? `$${(Number(detail.job.wage_cents) / 100).toFixed(0)}/day` : 'none'}
+                </span>
               </div>
               <div className="flex flex-wrap gap-1 pt-1">
                 {detail.inventory.map((item) => (
-                  <span key={item.key} className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5">
+                  <span
+                    key={item.key}
+                    className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5"
+                  >
                     {item.key} {item.qty}
                   </span>
                 ))}
-                {detail.inventory.length === 0 && <span className="text-zinc-500">no inventory</span>}
+                {detail.inventory.length === 0 && (
+                  <span className="text-zinc-500">no inventory</span>
+                )}
               </div>
               <div className="border-t border-white/10 pt-1.5">
                 <span className="text-zinc-500">shares</span>
                 <div className="mt-1 flex flex-wrap gap-1">
                   {detail.holdings.slice(0, 4).map((holding) => (
-                    <span key={holding.company_id} className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5">
+                    <span
+                      key={holding.company_id}
+                      className="rounded border border-white/10 bg-white/[0.04] px-2 py-0.5"
+                    >
                       {holding.ticker ?? holding.company} {holding.shares}
                     </span>
                   ))}
@@ -166,7 +234,10 @@ export default function AgentDrawer() {
               <h3 className="text-[10px] uppercase text-zinc-500 mb-1.5">Civic record</h3>
               <div className="space-y-1 text-xs">
                 {detail.votes.slice(0, 3).map((v) => (
-                  <div key={`${v.election_id}-${v.t}`} className="rounded border border-white/5 bg-black/20 px-2 py-1 text-zinc-300">
+                  <div
+                    key={`${v.election_id}-${v.t}`}
+                    className="rounded border border-white/5 bg-black/20 px-2 py-1 text-zinc-300"
+                  >
                     voted on {v.reason}
                   </div>
                 ))}
@@ -243,8 +314,10 @@ function labelEvent(kind: string, payload: Record<string, unknown>): string {
       return `ate ${String(payload.qty ?? 1)} food`;
     case 'agent_slept':
       return `slept`;
+    case 'agent_commuted':
+      return `headed to ${String(payload.building ?? payload.company ?? 'work')}`;
     case 'agent_worked':
-      return `worked`;
+      return `worked as ${String(payload.role ?? 'worker')} at ${String(payload.company ?? 'company')}`;
     case 'agent_paid_wage':
       return `received wage $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)}`;
     case 'agent_paid_rent':

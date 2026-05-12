@@ -19,6 +19,12 @@ export interface HeuristicContext {
   buildings: NearbyBuilding[];
   nearby_agents: NearbyAgent[];
   has_job: boolean;
+  job_role?: string | null;
+  job_company?: string | null;
+  job_industry?: string | null;
+  job_building_id?: string | null;
+  job_building?: string | null;
+  job_wage_cents?: number | null;
   has_home: boolean;
   food_qty: number;
   rng: () => number;
@@ -93,7 +99,13 @@ function pick<T>(arr: T[], rng: () => number): T {
 function groupKindFor(agent: Agent, ctx: HeuristicContext): 'cult' | 'party' | 'union' | 'club' {
   const occupation = (agent.occupation ?? '').toLowerCase();
   if (agent.traits.paranoia > 0.65 && agent.traits.sociability > 0.5) return 'cult';
-  if (occupation.includes('builder') || occupation.includes('chef') || occupation.includes('farmer') || ctx.has_job) return 'union';
+  if (
+    occupation.includes('builder') ||
+    occupation.includes('chef') ||
+    occupation.includes('farmer') ||
+    ctx.has_job
+  )
+    return 'union';
   if (agent.traits.ambition > 0.72 || occupation.includes('civil')) return 'party';
   return 'club';
 }
@@ -135,13 +147,20 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
     };
   }
 
-  if (!ctx.current_group_id && (ctx.candidate_groups?.length ?? 0) > 0 && rng() < sociability * 0.18) {
+  if (
+    !ctx.current_group_id &&
+    (ctx.candidate_groups?.length ?? 0) > 0 &&
+    rng() < sociability * 0.18
+  ) {
     const group = pick(ctx.candidate_groups!, rng);
     const fit = 1 - Math.min(2, Math.abs(agent.traits.ideology_lean - group.founder_ideology)) / 2;
     if (fit > 0.45 || group.member_count >= 3) return { kind: 'join_group', group_id: group.id };
   }
 
-  if (ctx.current_group_id && rng() < Math.max(0, (agent.traits.paranoia - agent.traits.agreeableness) * 0.05)) {
+  if (
+    ctx.current_group_id &&
+    rng() < Math.max(0, (agent.traits.paranoia - agent.traits.agreeableness) * 0.05)
+  ) {
     return { kind: 'leave_group', group_id: ctx.current_group_id };
   }
 
@@ -165,7 +184,12 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
     if (sellable.length > 0 && rng() < 0.45) {
       const holding = pick(sellable, rng);
       const asset = ctx.market_assets?.find((a) => a.company_id === holding.company_id);
-      const price = Math.max(80, Math.floor((asset?.last_price_cents ?? asset?.best_ask_cents ?? 120) * (1.04 + rng() * 0.12)));
+      const price = Math.max(
+        80,
+        Math.floor(
+          (asset?.last_price_cents ?? asset?.best_ask_cents ?? 120) * (1.04 + rng() * 0.12),
+        ),
+      );
       return {
         kind: 'place_order',
         side: 'sell',
@@ -228,11 +252,18 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
   }
   // hungry + at a shop with money → buy food
   if (hunger > 40 && ctx.at_shop_id && bal >= 500) {
-    return { kind: 'buy', item: 'food', qty: Math.min(3, Math.floor(bal / 400)), max_price_cents: 500 };
+    return {
+      kind: 'buy',
+      item: 'food',
+      qty: Math.min(3, Math.floor(bal / 400)),
+      max_price_cents: 500,
+    };
   }
   // hungry, no shop nearby → walk to one
   if (hunger > 45) {
-    const shop = ctx.buildings.find((b) => b.kind === 'shop' || b.kind === 'bar');
+    const shop = ctx.buildings.find(
+      (b) => b.kind === 'shop' || b.kind === 'restaurant' || b.kind === 'farm',
+    );
     if (shop) return { kind: 'move', to_building_id: shop.id };
   }
 

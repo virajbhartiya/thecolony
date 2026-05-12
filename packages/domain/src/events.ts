@@ -8,6 +8,7 @@ export const WorldEventKind = z.enum([
   'agent_dm',
   'agent_ate',
   'agent_slept',
+  'agent_commuted',
   'agent_worked',
   'job_posted',
   'agent_hired',

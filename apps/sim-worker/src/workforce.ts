@@ -66,8 +66,18 @@ export function roleForIndustry(industry: string | null | undefined): string {
       return 'builder';
     case 'shop':
       return 'shopkeeper';
+    case 'restaurant':
+      return 'chef';
     case 'bar':
       return 'bartender';
+    case 'clinic':
+      return 'doctor';
+    case 'school':
+      return 'teacher';
+    case 'newsroom':
+      return 'reporter';
+    case 'construction_yard':
+      return 'builder';
     case 'bank':
     case 'office':
       return 'stock broker';
@@ -87,13 +97,18 @@ export function roleForIndustry(industry: string | null | undefined): string {
 export function wageForRole(role: string): number {
   const normalized = role.toLowerCase();
   if (normalized.includes('broker')) return 2800;
+  if (normalized.includes('doctor')) return 2900;
   if (normalized.includes('engineer')) return 2400;
+  if (normalized.includes('mechanic')) return 2200;
   if (normalized.includes('builder')) return 2200;
   if (normalized.includes('shopkeeper')) return 2100;
   if (normalized.includes('chef')) return 2000;
   if (normalized.includes('guard')) return 2000;
   if (normalized.includes('civil')) return 2000;
+  if (normalized.includes('teacher')) return 1900;
+  if (normalized.includes('reporter')) return 1800;
   if (normalized.includes('bartender')) return 1900;
+  if (normalized.includes('courier')) return 1600;
   if (normalized.includes('farmer')) return 1700;
   return 1600;
 }

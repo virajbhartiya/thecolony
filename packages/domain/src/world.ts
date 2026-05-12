@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-export const ZoneKind = z.enum(['residential', 'commercial', 'industrial', 'civic', 'slum', 'park']);
+export const ZoneKind = z.enum([
+  'residential',
+  'commercial',
+  'industrial',
+  'civic',
+  'slum',
+  'park',
+]);
 export type ZoneKind = z.infer<typeof ZoneKind>;
 
 export const BuildingKind = z.enum([
@@ -10,7 +17,12 @@ export const BuildingKind = z.enum([
   'factory',
   'farm',
   'bar',
+  'restaurant',
   'office',
+  'clinic',
+  'school',
+  'newsroom',
+  'construction_yard',
   'bank',
   'court',
   'jail',

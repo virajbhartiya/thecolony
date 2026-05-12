@@ -75,7 +75,12 @@ async function main() {
         owner_kind: 'city' as const,
       })),
     )
-    .returning({ id: schema.building.id, kind: schema.building.kind, tile_x: schema.building.tile_x, tile_y: schema.building.tile_y });
+    .returning({
+      id: schema.building.id,
+      kind: schema.building.kind,
+      tile_x: schema.building.tile_x,
+      tile_y: schema.building.tile_y,
+    });
   log.info({ count: buildingRows.length }, 'inserted buildings');
 
   // companies — economic and civic workplaces. Founders are assigned after agents exist.
@@ -86,8 +91,13 @@ async function main() {
     'power_plant',
     'shop',
     'bar',
+    'restaurant',
     'bank',
     'office',
+    'clinic',
+    'school',
+    'newsroom',
+    'construction_yard',
     'court',
     'town_hall',
     'temple',
@@ -102,12 +112,19 @@ async function main() {
   }> = [];
   for (const b of producing) {
     const industry = industryForBuilding(b.kind);
+    const district = districtForTile(b.tile_x, b.tile_y);
     const [c] = await db
       .insert(schema.company)
       .values({
         name: companyNameFor(b.kind, b.id, rngForName(b.id)),
         founder_id: null,
-        charter: { industry, mission: `${industry} at ${b.tile_x},${b.tile_y}` },
+        charter: {
+          industry,
+          district,
+          mission: missionForIndustry(industry, district),
+          address: `${district} block ${b.tile_x},${b.tile_y}`,
+          city_only: true,
+        },
         treasury_cents: 100000,
         building_id: b.id,
         industry,
@@ -126,7 +143,12 @@ async function main() {
   const rng = mulberry32(1234);
   const count = env().SIM_AGENT_COUNT;
   const homeCandidates = buildingRows.filter((b) => b.kind === 'house' || b.kind === 'apartment');
-  const createdAgents: Array<{ id: string; name: string; profile: ProfessionProfile; assigned: boolean }> = [];
+  const createdAgents: Array<{
+    id: string;
+    name: string;
+    profile: ProfessionProfile;
+    assigned: boolean;
+  }> = [];
   for (let i = 0; i < count; i++) {
     const home = homeCandidates[Math.floor(rng() * homeCandidates.length)];
     const pos = home ? { x: home.tile_x + 0.5, y: home.tile_y + 0.5 } : { x: 30, y: 30 };
@@ -172,14 +194,20 @@ async function main() {
   for (const company of companyRows) {
     const founder = takeBestFounder(createdAgents, company.industry);
     if (!founder) continue;
-    await db.update(schema.company).set({ founder_id: founder.id }).where(sql`${schema.company.id} = ${company.id}`);
+    await db
+      .update(schema.company)
+      .set({ founder_id: founder.id })
+      .where(sql`${schema.company.id} = ${company.id}`);
     await db.insert(schema.job).values({
       agent_id: founder.id,
       company_id: company.id,
       role: 'founder',
       wage_cents: Math.max(founder.profile.wage_cents, 2200),
     });
-    await db.update(schema.agent).set({ employer_id: company.id }).where(sql`${schema.agent.id} = ${founder.id}`);
+    await db
+      .update(schema.agent)
+      .set({ employer_id: company.id })
+      .where(sql`${schema.agent.id} = ${founder.id}`);
     founder.assigned = true;
     await db.insert(schema.world_event).values({
       kind: 'company_founded',
@@ -190,7 +218,12 @@ async function main() {
   }
 
   for (const agent of createdAgents.filter((a) => !a.assigned)) {
-    let company: { id: string; name: string; industry: string | null; building_id: string | null } | null = null;
+    let company: {
+      id: string;
+      name: string;
+      industry: string | null;
+      building_id: string | null;
+    } | null = null;
     for (const candidate of rankedCompaniesFor(agent.profile, companyRows)) {
       const workers = await db.execute<{ n: number }>(
         sql`SELECT COUNT(*)::int AS n FROM ${schema.job} WHERE company_id=${candidate.id} AND ended_at IS NULL`,
@@ -207,13 +240,20 @@ async function main() {
       role: agent.profile.role,
       wage_cents: agent.profile.wage_cents,
     });
-    await db.update(schema.agent).set({ employer_id: company.id }).where(sql`${schema.agent.id} = ${agent.id}`);
+    await db
+      .update(schema.agent)
+      .set({ employer_id: company.id })
+      .where(sql`${schema.agent.id} = ${agent.id}`);
     agent.assigned = true;
     await db.insert(schema.world_event).values({
       kind: 'agent_hired',
       actor_ids: [agent.id, company.id],
       importance: 4,
-      payload: { role: agent.profile.role, company: company.name, wage_cents: agent.profile.wage_cents },
+      payload: {
+        role: agent.profile.role,
+        company: company.name,
+        wage_cents: agent.profile.wage_cents,
+      },
     });
   }
 
@@ -280,7 +320,10 @@ function industryForBuilding(kind: string): string {
 }
 
 function companyNameFor(kind: string, id: string, rng: () => number): string {
-  const district = pickOne(['Northbank', 'Riverside', 'Canal Row', 'Market Street', 'Old Mill', 'Civic Quarter'], rng);
+  const district = pickOne(
+    ['Northbank', 'Riverside', 'Canal Row', 'Market Street', 'Old Mill', 'Civic Quarter'],
+    rng,
+  );
   const suffix = id.slice(0, 3).toUpperCase();
   switch (kind) {
     case 'farm':
@@ -295,10 +338,20 @@ function companyNameFor(kind: string, id: string, rng: () => number): string {
       return `${district} Market ${suffix}`;
     case 'bar':
       return `${district} Public House ${suffix}`;
+    case 'restaurant':
+      return `${district} Kitchen ${suffix}`;
     case 'bank':
       return 'First Bank & Exchange';
     case 'office':
       return 'Riverside Brokerage';
+    case 'clinic':
+      return 'Riverside Clinic Cooperative';
+    case 'school':
+      return 'Northbank Schoolhouse';
+    case 'newsroom':
+      return 'The Daily Ledger';
+    case 'construction_yard':
+      return `${district} Builders Yard ${suffix}`;
     case 'town_hall':
       return 'Civic Works Office';
     case 'court':
@@ -309,6 +362,50 @@ function companyNameFor(kind: string, id: string, rng: () => number): string {
       return 'Old Temple Trust';
     default:
       return `${district} Works ${suffix}`;
+  }
+}
+
+function districtForTile(x: number, y: number): string {
+  if (y < 20) return 'Civic Quarter';
+  if (x < 30 && y < 44) return 'Northbank';
+  if (x >= 30 && y < 44) return 'Market Street';
+  if (x < 30 && y >= 44) return 'Canal Row';
+  if (x >= 30 && y >= 44) return 'Old Mill';
+  return 'Riverside';
+}
+
+function missionForIndustry(industry: string, district: string): string {
+  switch (industry) {
+    case 'restaurant':
+      return `cook daily meals for workers, traders, and tenants in ${district}`;
+    case 'shop':
+      return `keep household goods moving through ${district}`;
+    case 'farm':
+      return `grow food for the city's kitchens and markets`;
+    case 'factory':
+      return `turn raw stock into usable goods for local shops`;
+    case 'construction_yard':
+      return `repair streets, homes, and civic buildings inside the city`;
+    case 'bank':
+    case 'office':
+      return `price credit, shares, and risk for city businesses`;
+    case 'clinic':
+      return `treat injuries, exhaustion, and public-health trouble`;
+    case 'school':
+      return `teach the next generation of city citizens`;
+    case 'newsroom':
+      return `record rumors, crimes, elections, and market shocks`;
+    case 'town_hall':
+      return `run permits, taxes, welfare, and public works`;
+    case 'court':
+      return `hear disputes and convert accusations into verdicts`;
+    case 'jail':
+      return `hold convicted citizens until release`;
+    case 'water_works':
+    case 'power_plant':
+      return `keep utilities running for every block`;
+    default:
+      return `serve the local economy in ${district}`;
   }
 }
 
@@ -326,13 +423,23 @@ function takeBestFounder(
   agents: Array<{ id: string; name: string; profile: ProfessionProfile; assigned: boolean }>,
   industry: string | null,
 ) {
-  const candidate = agents.find((a) => !a.assigned && industry && a.profile.industries.includes(industry));
-  return candidate ?? agents.find((a) => !a.assigned) ?? null;
+  return (
+    [...agents]
+      .filter((a) => !a.assigned)
+      .sort(
+        (a, b) => companyFitScore(b.profile, industry) - companyFitScore(a.profile, industry),
+      )[0] ?? null
+  );
 }
 
 function rankedCompaniesFor(
   profile: ProfessionProfile,
-  companies: Array<{ id: string; name: string; industry: string | null; building_id: string | null }>,
+  companies: Array<{
+    id: string;
+    name: string;
+    industry: string | null;
+    building_id: string | null;
+  }>,
 ) {
   return [...companies].sort((a, b) => scoreCompany(profile, b) - scoreCompany(profile, a));
 }
@@ -341,7 +448,30 @@ function scoreCompany(
   profile: ProfessionProfile,
   company: { id: string; name: string; industry: string | null; building_id: string | null },
 ): number {
-  if (company.industry && profile.industries.includes(company.industry)) return 10;
+  const fit = companyFitScore(profile, company.industry);
+  if (fit > 0) return fit;
   if (company.industry === 'office') return 2;
+  return 0;
+}
+
+function companyFitScore(profile: ProfessionProfile, industry: string | null): number {
+  if (!industry) return 0;
+  if (profile.industries.includes(industry)) return 100;
+  const key = profile.key;
+  const service = new Set(['restaurant', 'bar', 'shop']);
+  const industrial = new Set(['factory', 'construction_yard', 'water_works', 'power_plant']);
+  const civic = new Set(['town_hall', 'court', 'jail']);
+
+  if (service.has(industry) && ['chef', 'shopkeeper', 'bartender', 'courier'].includes(key))
+    return 60;
+  if (industry === 'farm' && ['farmer', 'chef', 'courier'].includes(key)) return 60;
+  if (industrial.has(industry) && ['builder', 'engineer', 'mechanic'].includes(key)) return 60;
+  if (civic.has(industry) && ['civil_servant', 'guard', 'reporter'].includes(key)) return 55;
+  if (industry === 'clinic' && ['doctor', 'civil_servant'].includes(key)) return 70;
+  if (industry === 'school' && ['teacher', 'artist', 'civil_servant'].includes(key)) return 70;
+  if (industry === 'newsroom' && ['reporter', 'artist', 'stock_broker'].includes(key)) return 70;
+  if (industry === 'bank' && ['stock_broker', 'guard', 'civil_servant'].includes(key)) return 70;
+  if (industry === 'office' && ['stock_broker', 'reporter', 'civil_servant'].includes(key))
+    return 60;
   return 0;
 }

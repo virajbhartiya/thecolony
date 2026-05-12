@@ -5,24 +5,40 @@ const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   agent_died: { label: 'death', tone: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
   agent_bankrupt: { label: 'bankrupt', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
   agent_evicted: { label: 'evicted', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  agent_homed: { label: 'housing', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  agent_homed: {
+    label: 'housing',
+    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+  },
   agent_hired: { label: 'hired', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   agent_fired: { label: 'fired', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
-  agent_paid_wage: { label: 'wage', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  agent_paid_wage: {
+    label: 'wage',
+    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+  },
   agent_paid_rent: { label: 'rent', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
   agent_paid_tax: { label: 'tax', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   agent_spoke: { label: 'speech', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
   agent_ate: { label: 'food', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
   agent_slept: { label: 'sleep', tone: 'text-zinc-400 border-zinc-600/30 bg-white/[0.03]' },
   agent_moved: { label: 'move', tone: 'text-zinc-500 border-zinc-700/30 bg-white/[0.02]' },
+  agent_commuted: { label: 'commute', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   agent_worked: { label: 'work', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
   job_posted: { label: 'jobs', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   company_founded: { label: 'company', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
   shares_issued: { label: 'shares', tone: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
   order_placed: { label: 'order', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
-  trade_executed: { label: 'trade', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
-  agent_spawned: { label: 'born', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
-  migrant_arrived: { label: 'migrant', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  trade_executed: {
+    label: 'trade',
+    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+  },
+  agent_spawned: {
+    label: 'born',
+    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+  },
+  migrant_arrived: {
+    label: 'migrant',
+    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+  },
   birth: { label: 'birth', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
   incident_theft: { label: 'theft', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
   incident_assault: { label: 'assault', tone: 'text-rose-400 border-rose-500/30 bg-rose-500/10' },
@@ -31,9 +47,15 @@ const KIND_LABEL: Record<string, { label: string; tone: string }> = {
   incident_witnessed: { label: 'witness', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
   agent_accused: { label: 'accused', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
   court_verdict: { label: 'court', tone: 'text-sky-300 border-sky-500/30 bg-sky-500/10' },
-  bounty_paid: { label: 'bounty', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  bounty_paid: {
+    label: 'bounty',
+    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+  },
   agent_jailed: { label: 'jailed', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' },
-  agent_released: { label: 'released', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  agent_released: {
+    label: 'released',
+    tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10',
+  },
   group_founded: { label: 'group', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
   group_joined: { label: 'joined', tone: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
   group_left: { label: 'left', tone: 'text-zinc-300 border-zinc-500/30 bg-white/[0.04]' },
@@ -49,7 +71,7 @@ export default function EventTicker() {
   const agents = useWorld((s) => s.agents);
   const select = useWorld((s) => s.selectAgent);
 
-  const visible = events.filter((e) => (KIND_LABEL[e.kind]?.label) && e.importance >= 1).slice(0, 60);
+  const visible = events.filter((e) => KIND_LABEL[e.kind]?.label && e.importance >= 1).slice(0, 60);
 
   return (
     <div className="pointer-events-auto absolute right-4 top-4 bottom-4 w-[340px] glass-strong rounded-lg flex flex-col shadow-2xl">
@@ -59,12 +81,15 @@ export default function EventTicker() {
       </div>
       <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5">
         {visible.length === 0 && (
-          <div className="text-xs text-zinc-500 px-2 py-4">No events yet. The city is waking up.</div>
+          <div className="text-xs text-zinc-500 px-2 py-4">
+            No events yet. The city is waking up.
+          </div>
         )}
         {visible.map((e) => {
           const meta = KIND_LABEL[e.kind] ?? { label: e.kind, tone: 'text-zinc-400' };
           const actor = agents.get(e.actor_ids[0] ?? '');
-          const actorName = civicActor(e.kind) !== 'unknown' ? civicActor(e.kind) : actor?.name ?? 'unknown';
+          const actorName =
+            civicActor(e.kind) !== 'unknown' ? civicActor(e.kind) : (actor?.name ?? 'unknown');
           const detail = describeEvent(e);
           return (
             <button
@@ -73,12 +98,14 @@ export default function EventTicker() {
               className="w-full text-left rounded-md border border-white/[0.045] bg-black/15 px-2 py-2 hover:bg-white/[0.055] transition-colors"
             >
               <span className="flex items-start gap-2">
-                <span className={`text-[10px] uppercase rounded border px-1.5 py-0.5 shrink-0 ${meta.tone}`}>
+                <span
+                  className={`text-[10px] uppercase rounded border px-1.5 py-0.5 shrink-0 ${meta.tone}`}
+                >
                   {meta.label}
                 </span>
                 <span className="text-xs leading-snug text-zinc-200 min-w-0">
-                <span className="font-medium">{actorName}</span>
-                {detail && <span className="text-zinc-400"> - {detail}</span>}
+                  <span className="font-medium">{actorName}</span>
+                  {detail && <span className="text-zinc-400"> - {detail}</span>}
                 </span>
               </span>
             </button>
@@ -116,6 +143,10 @@ function describeEvent(e: { kind: string; payload: Record<string, unknown> }): s
       return `mayor ${String(p.mayor_name ?? 'unseated')}, tax ${(Number(p.tax_rate_bps ?? 0) / 100).toFixed(1)}%`;
     case 'agent_hired':
       return `as ${String(p.role ?? 'worker')} at ${String(p.company ?? 'a company')}`;
+    case 'agent_commuted':
+      return `${String(p.role ?? 'worker')} to ${String(p.building ?? p.company ?? 'work')}`;
+    case 'agent_worked':
+      return `${String(p.role ?? 'worker')} at ${String(p.company ?? 'company')}`;
     case 'agent_fired':
       return `${String(p.role ?? 'worker')} from ${String(p.company ?? 'a company')}`;
     case 'job_posted':

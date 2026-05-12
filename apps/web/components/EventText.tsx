@@ -10,6 +10,10 @@ export function eventText(kind: string, payload: Record<string, unknown> = {}): 
       return `${String(payload.company ?? 'A company')} posted ${String(payload.openings ?? '?')} ${String(payload.role ?? 'worker')} opening(s)`;
     case 'agent_paid_wage':
       return `earned $${(Number(payload.amount_cents ?? 0) / 100).toFixed(0)} in wages`;
+    case 'agent_commuted':
+      return `headed to ${String(payload.building ?? payload.company ?? 'work')} as ${String(payload.role ?? 'worker')}`;
+    case 'agent_worked':
+      return `worked as ${String(payload.role ?? 'worker')} at ${String(payload.company ?? 'a company')}`;
     case 'agent_paid_rent':
       return `paid $${(Number(payload.rent ?? 0) / 100).toFixed(0)} rent`;
     case 'city_tax_collected':

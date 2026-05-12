@@ -16,7 +16,11 @@ export async function applyPayroll(): Promise<void> {
 
   for (const j of jobs) {
     const wage = Number(j.wage_cents);
-    const [comp] = await db.select().from(schema.company).where(eq(schema.company.id, j.company_id)).limit(1);
+    const [comp] = await db
+      .select()
+      .from(schema.company)
+      .where(eq(schema.company.id, j.company_id))
+      .limit(1);
     if (!comp) continue;
     const paid = Math.min(wage, Number(comp.treasury_cents));
     if (paid <= 0) continue;
@@ -134,8 +138,12 @@ function primaryItemFor(industry: string): number | null {
       return 4; // cloth
     case 'shop':
       return 1; // sells food
+    case 'restaurant':
+      return 1; // prepared food
     case 'bar':
       return 6; // luxury
+    case 'construction_yard':
+      return 5; // tools
     default:
       return null;
   }
