@@ -38,7 +38,7 @@ export default function CityCanvas({ className }: { className?: string }) {
   const selectAgent = useWorld((s) => s.selectAgent);
   const selectBuilding = useWorld((s) => s.selectBuilding);
 
-  const [view, setView] = useState({ scale: 1.0, x: 0, y: 60 });
+  const [view, setView] = useState({ scale: 1.5, x: 0, y: 60 });
   const dragging = useRef<{ x: number; y: number; vx: number; vy: number } | null>(null);
   const [hovered, setHovered] = useState<
     { kind: 'agent' | 'building'; id: string } | null

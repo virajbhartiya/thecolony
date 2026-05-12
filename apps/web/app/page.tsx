@@ -9,8 +9,7 @@ import EventTicker from '../components/EventTicker';
 import BottomBar from '../components/BottomBar';
 import AgentDrawer from '../components/AgentDrawer';
 import BuildingDrawer from '../components/BuildingDrawer';
-import GovernmentCard from '../components/GovernmentCard';
-import CityPulse from '../components/CityPulse';
+import LeftSidebar from '../components/LeftSidebar';
 
 export default function Home() {
   const loadSnapshot = useWorld((s) => s.loadSnapshot);
@@ -79,8 +78,7 @@ export default function Home() {
       <CityCanvas />
       <div className="scanlines" />
       <HUD />
-      <GovernmentCard />
-      <CityPulse />
+      <LeftSidebar />
       <EventTicker />
       <BottomBar />
       {selectedAgentId && <AgentDrawer />}

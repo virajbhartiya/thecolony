@@ -178,16 +178,22 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
     }
   }
 
-  if (isBroker && (ctx.market_assets?.length ?? 0) > 0 && rng() < 0.42) {
+  // Speculate: any agent with a risk appetite or money sitting idle may trade.
+  // Brokers do it more often; everyone else does it occasionally.
+  const tradeAppetite = isBroker
+    ? 0.42
+    : (risk * 0.18 + ambition * 0.12 + Math.min(0.15, bal / 50_000)) * 0.6;
+  if ((ctx.market_assets?.length ?? 0) > 0 && rng() < tradeAppetite) {
     const holdings = ctx.share_holdings ?? [];
     const sellable = holdings.filter((h) => h.shares >= 5);
-    if (sellable.length > 0 && rng() < 0.45) {
+    // Holders sometimes sell to lock in profit.
+    if (sellable.length > 0 && rng() < (isBroker ? 0.45 : 0.25)) {
       const holding = pick(sellable, rng);
       const asset = ctx.market_assets?.find((a) => a.company_id === holding.company_id);
       const price = Math.max(
         80,
         Math.floor(
-          (asset?.last_price_cents ?? asset?.best_ask_cents ?? 120) * (1.04 + rng() * 0.12),
+          (asset?.last_price_cents ?? asset?.best_ask_cents ?? 120) * (1.02 + rng() * 0.10),
         ),
       );
       return {
@@ -198,15 +204,18 @@ export function heuristicDecide(agent: Agent, ctx: HeuristicContext): Action {
         price_cents: price,
       };
     }
-    if (bal > 2500) {
+    // Buy side: needs at least ~$10 to make a meaningful bid.
+    if (bal > 1000) {
       const asset = pick(ctx.market_assets!, rng);
       const anchor = asset.best_ask_cents ?? asset.last_price_cents ?? 120;
-      const price = Math.max(50, Math.floor(anchor * (0.92 + rng() * 0.18)));
+      // Be slightly above the best-bid to actually clear, not below it.
+      const price = Math.max(50, Math.floor(anchor * (0.96 + rng() * 0.10)));
+      const maxQty = Math.max(1, Math.min(10, Math.floor(bal / Math.max(price * 4, 1))));
       return {
         kind: 'place_order',
         side: 'buy',
         asset: asset.asset,
-        qty: Math.max(1, Math.min(10, Math.floor(bal / Math.max(price * 6, 1)))),
+        qty: maxQty,
         price_cents: price,
       };
     }

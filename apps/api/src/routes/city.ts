@@ -520,22 +520,51 @@ export async function registerCityRoutes(app: FastifyInstance) {
       doctrine: string;
       member_count: number;
       founded_at: string;
+      avg_ideology: number;
+      avg_balance_cents: number;
+      avg_life_sat: number;
     }>(sql`
       SELECT g.id, g.name, g.kind, g.founder_id, a.name AS founder_name, g.doctrine, g.founded_at,
-        COUNT(m.agent_id)::int AS member_count
+        COUNT(m.agent_id)::int AS member_count,
+        COALESCE(AVG((mem.traits->>'ideology_lean')::float), 0)::float AS avg_ideology,
+        COALESCE(AVG(mem.balance_cents)::bigint, 0)::bigint AS avg_balance_cents,
+        COALESCE(AVG((mem.needs->>'life_satisfaction')::float), 50)::float AS avg_life_sat
       FROM ${schema.ideology_group} g
       LEFT JOIN ${schema.agent} a ON a.id = g.founder_id
       LEFT JOIN ${schema.group_membership} m ON m.group_id = g.id
+      LEFT JOIN ${schema.agent} mem ON mem.id = m.agent_id AND mem.status <> 'dead'
       GROUP BY g.id, g.name, g.kind, g.founder_id, a.name, g.doctrine
       ORDER BY member_count DESC, g.founded_at DESC
     `);
+
+    const members = await db.execute<{
+      group_id: string;
+      id: string;
+      name: string;
+      occupation: string | null;
+      balance_cents: number;
+      role: string;
+      joined_at: string;
+    }>(sql`
+      SELECT m.group_id, a.id, a.name, a.occupation, a.balance_cents, m.role, m.joined_at
+      FROM ${schema.group_membership} m
+      JOIN ${schema.agent} a ON a.id = m.agent_id
+      WHERE a.status <> 'dead'
+      ORDER BY m.group_id, m.role DESC, m.joined_at ASC
+    `);
+
     const recentActivity = await db
       .select()
       .from(schema.world_event)
       .where(sql`${schema.world_event.kind} IN ('group_founded', 'group_joined', 'group_left')`)
       .orderBy(desc(schema.world_event.t))
       .limit(60);
-    return { groups, recentActivity };
+
+    const membersByGroup: Record<string, typeof members> = {};
+    for (const m of members) {
+      (membersByGroup[m.group_id] ??= [] as never).push(m);
+    }
+    return { groups, members: membersByGroup, recentActivity };
   });
 
   app.get('/v1/history', async () => {

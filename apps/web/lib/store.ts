@@ -105,7 +105,17 @@ export const useWorld = create<WorldState>((set, get) => ({
       simTime: s.sim_time,
     });
   },
-  loadEvents: (events) => set({ events: events.slice(0, 200) }),
+  loadEvents: (events) => {
+    const seen = new Set<number>();
+    const deduped: LiveEvent[] = [];
+    for (const e of events) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
+      deduped.push(e);
+      if (deduped.length >= 200) break;
+    }
+    set({ events: deduped });
+  },
   applyEvent: (e) => {
     const agents = new Map(get().agents);
     const now = Date.now();
@@ -219,7 +229,11 @@ export const useWorld = create<WorldState>((set, get) => ({
         for (const id of e.actor_ids.slice(0, 3)) floater(id, 'news', '#58a6ff');
         break;
     }
-    const events = [e, ...get().events].slice(0, 200);
+    // Dedup by event id — defends against WS reconnect / double-emit / double-mount.
+    const existing = get().events;
+    const events = existing.some((x) => x.id === e.id)
+      ? existing
+      : [e, ...existing].slice(0, 200);
     set({ agents, events });
   },
   setAgentTarget: (id, tx, ty) => {
