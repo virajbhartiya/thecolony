@@ -150,23 +150,36 @@ export async function leaveGroup(agent: Agent, groupId: string): Promise<void> {
 }
 
 export async function applyBeliefUpdates(limit = 30): Promise<number> {
+  // Only agents whose last belief is at least 30 minutes old. The previous
+  // 2-minute cooldown was so short the ticker showed 5+ near-identical
+  // beliefs back to back.
   const agents = await db.execute<{
     id: string;
     name: string;
     traits: Agent['traits'];
     occupation: string | null;
+    last_belief_summary: string | null;
   }>(sql`
-    SELECT id, name, traits, occupation
+    SELECT
+      a.id,
+      a.name,
+      a.traits,
+      a.occupation,
+      (
+        SELECT m.summary FROM ${schema.agent_memory} m
+        WHERE m.agent_id = a.id AND m.kind = 'belief'
+        ORDER BY m.t DESC LIMIT 1
+      ) AS last_belief_summary
     FROM ${schema.agent} a
-    WHERE status = 'alive'
+    WHERE a.status = 'alive'
       AND NOT EXISTS (
         SELECT 1
         FROM ${schema.agent_memory} m
         WHERE m.agent_id = a.id
           AND m.kind = 'belief'
-          AND m.t > now() - interval '2 minutes'
+          AND m.t > now() - interval '30 minutes'
       )
-    ORDER BY next_decision_at ASC
+    ORDER BY a.next_decision_at ASC
     LIMIT ${limit}
   `);
 
@@ -189,11 +202,14 @@ export async function applyBeliefUpdates(limit = 30): Promise<number> {
 
     const eventKinds = events.map((event) => event.kind);
     const delta = ideologyDelta(eventKinds, groups.map((group) => group.kind), agent.occupation);
-    if (Math.abs(delta) < 0.005) continue;
+    // Tighter threshold — minor noise shouldn't generate a "belief shift".
+    if (Math.abs(delta) < 0.02) continue;
 
     const current = Number(agent.traits.ideology_lean ?? 0);
     const next = Math.max(-1, Math.min(1, current + delta));
     const summary = beliefSummary(agent.name, current, next, eventKinds, groups.map((group) => group.kind));
+    // Content dedup: skip if this exact summary is what we wrote last time.
+    if (agent.last_belief_summary && agent.last_belief_summary === summary) continue;
     await db.execute(sql`
       UPDATE ${schema.agent}
       SET traits = jsonb_set(traits, '{ideology_lean}', to_jsonb(${next}::float), true),
