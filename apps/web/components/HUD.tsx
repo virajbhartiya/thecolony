@@ -93,16 +93,18 @@ export default function HUD() {
       <div style={{ flex: 1 }} />
 
       <nav style={{ display: 'flex', gap: 4 }}>
-        {[
-          ['/feed', 'Feed'],
-          ['/news', 'News'],
-          ['/leaderboards', 'Leaders'],
-          ['/market', 'Market'],
-          ['/companies', 'Cos'],
-          ['/crime', 'Crime'],
-          ['/groups', 'Groups'],
-          ['/history', 'History'],
-        ].map(([href, label]) => (
+        {(
+          [
+            ['/feed', 'Feed'],
+            ['/news', 'News'],
+            ['/leaderboards', 'Leaders'],
+            ['/market', 'Market'],
+            ['/companies', 'Cos'],
+            ['/crime', 'Crime'],
+            ['/groups', 'Groups'],
+            ['/history', 'History'],
+          ] as const
+        ).map(([href, label]) => (
           <Link key={href} href={href} className="chip" style={{ textDecoration: 'none', padding: '2px 7px' }}>
             {label}
           </Link>

@@ -272,7 +272,7 @@ export default function NewsPage() {
 
 function LeadStory({ h }: { h: Headline }) {
   const desk = DESK_BY_KIND[h.kind] ?? 'civic';
-  const meta = DESK_TONE[desk];
+  const meta = DESK_TONE[desk]!;
   return (
     <Panel style={{ padding: '20px 22px', borderTop: `3px solid ${meta.tone}` }}>
       <div
@@ -309,7 +309,7 @@ function DeskSection({
   desk: 'crime' | 'market' | 'society' | 'government' | 'civic';
   items: Headline[];
 }) {
-  const meta = DESK_TONE[desk];
+  const meta = DESK_TONE[desk]!;
   return (
     <Panel style={{ padding: 0, overflow: 'hidden' }}>
       <div
